@@ -3,65 +3,58 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
+const { testDatabaseConnection } = require('./config/database');
+const { initDatabase } = require('./database/init');
+
 const app = express();
 const PORT = process.env.PORT || 4000;
-
-// ===============================
-// CORS
-// ===============================
 
 app.use(
   cors({
     origin: process.env.CORS_ORIGIN || '*',
-    credentials: true,
+    credentials: true
   })
 );
 
-// ===============================
-// JSON
-// ===============================
-
 app.use(express.json({ limit: '1mb' }));
 
-// ===============================
-// HEALTH CHECK
-// ===============================
+app.get('/health', async (_req, res) => {
+  try {
+    const database = await testDatabaseConnection();
 
-app.get('/health', (_req, res) => {
-  res.json({
-    ok: true,
-    service: 'sellflow-backend',
-    version: '2.0.0',
-    time: new Date().toISOString()
-  });
+    res.json({
+      ok: true,
+      service: 'sellflow-backend',
+      version: '2.0.0',
+      database: database.connected ? 'connected' : 'disconnected',
+      time: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Erreur PostgreSQL:', error);
+
+    res.status(500).json({
+      ok: false,
+      service: 'sellflow-backend',
+      version: '2.0.0',
+      database: 'disconnected',
+      error: 'Connexion à la base de données impossible'
+    });
+  }
 });
-
-// ===============================
-// API
-// ===============================
 
 app.get('/', (_req, res) => {
   res.json({
     name: 'SellFlow AI API',
     status: 'online',
-    version: '2.0.0',
-    message: 'SellFlow backend is running.'
+    version: '2.0.0'
   });
 });
-
-// ===============================
-// 404
-// ===============================
 
 app.use((_req, res) => {
   res.status(404).json({
     error: 'Route introuvable'
   });
 });
-
-// ===============================
-// ERREURS
-// ===============================
 
 app.use((err, _req, res, _next) => {
   console.error('Erreur serveur:', err);
@@ -71,11 +64,27 @@ app.use((err, _req, res, _next) => {
   });
 });
 
-// ===============================
-// START
-// ===============================
+async function startServer() {
+  try {
+    console.log('Connexion à PostgreSQL...');
 
-app.listen(PORT, () => {
-  console.log(`SellFlow API démarrée sur le port ${PORT}`);
-  console.log(`Port: ${PORT}`);
-});
+    await testDatabaseConnection();
+
+    console.log('PostgreSQL connecté.');
+
+    console.log('Initialisation de la base de données...');
+
+    await initDatabase();
+
+    console.log('Base de données prête.');
+
+    app.listen(PORT, () => {
+      console.log(`SellFlow API démarrée sur le port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('Impossible de démarrer SellFlow:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
