@@ -117,10 +117,12 @@ function createEmailTransporter() {
     host: 'smtp.gmail.com',
     port: 465,
     secure: true,
+
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_APP_PASSWORD
     },
+
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 15000
@@ -129,6 +131,9 @@ function createEmailTransporter() {
 
 async function sendTestEmail() {
   const transporter = createEmailTransporter();
+
+  /* Vérification SMTP avant l'envoi */
+  await transporter.verify();
 
   const info = await transporter.sendMail({
     from:
@@ -147,16 +152,29 @@ async function sendTestEmail() {
         font-family:Arial,sans-serif;
         max-width:600px;
         margin:auto;
-        padding:30px
+        padding:30px;
+        background:#ffffff;
+        color:#111827
       ">
-        <h2>SellFlow AI</h2>
 
-        <p>Félicitations 🎉</p>
+        <h2 style="margin-bottom:20px;">
+          SellFlow AI
+        </h2>
+
+        <p style="font-size:18px;">
+          Félicitations 🎉
+        </p>
 
         <p>
           L'envoi d'emails depuis le backend
           fonctionne correctement.
         </p>
+
+        <p>
+          Votre serveur SellFlow AI peut maintenant
+          communiquer avec Gmail.
+        </p>
+
       </div>
     `
   });
@@ -184,10 +202,16 @@ app.get('/test-email', async (_req, res) => {
     res.status(500).json({
       ok: false,
       error: 'Impossible d’envoyer l’email.',
-      details:
-        process.env.NODE_ENV === 'production'
-          ? undefined
-          : error.message
+
+      details: error.message || null,
+
+      code: error.code || null,
+
+      command: error.command || null,
+
+      response: error.response || null,
+
+      responseCode: error.responseCode || null
     });
   }
 });
