@@ -6,6 +6,7 @@ const nodemailer = require('nodemailer');
 
 const { testDatabaseConnection } = require('./config/database');
 const { initDatabase } = require('./database/init');
+const authRoutes = require('./routes/auth');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -18,6 +19,12 @@ app.use(
 );
 
 app.use(express.json({ limit: '1mb' }));
+
+/* =========================
+   AUTHENTIFICATION
+========================= */
+
+app.use('/auth', authRoutes);
 
 /* =========================
    DATABASE
@@ -59,11 +66,16 @@ function createEmailTransporter() {
   }
 
   return nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_APP_PASSWORD
-    }
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000
   });
 }
 
@@ -89,10 +101,10 @@ async function sendTestEmail() {
   return info.messageId;
 }
 
-/*
-  Route temporaire de test Gmail.
-  Elle sera supprimée après validation.
-*/
+/* =========================
+   TEST GMAIL
+========================= */
+
 app.get('/test-email', async (_req, res) => {
   try {
     const messageId = await sendTestEmail();
@@ -124,7 +136,25 @@ app.get('/', (_req, res) => {
   res.json({
     name: 'SellFlow AI API',
     status: 'online',
-    version: '2.0.0'
+    version: '2.0.0',
+    endpoints: {
+      health: 'GET /health',
+
+      registerRequestCode:
+        'POST /auth/register/request-code',
+
+      registerVerifyCode:
+        'POST /auth/register/verify-code',
+
+      registerComplete:
+        'POST /auth/register/complete',
+
+      login:
+        'POST /auth/login',
+
+      me:
+        'GET /auth/me'
+    }
   });
 });
 
