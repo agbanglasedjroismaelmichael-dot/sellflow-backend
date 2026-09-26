@@ -115,24 +115,32 @@ function createEmailTransporter() {
 
   return nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
+
+    /* Gmail SMTP avec STARTTLS */
+    port: 587,
+
+    /* IMPORTANT :
+       false = connexion initiale non chiffrée,
+       puis STARTTLS est utilisé. */
+    secure: false,
 
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_APP_PASSWORD
     },
 
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000
+    requireTLS: true,
+
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000
   });
 }
 
 async function sendTestEmail() {
   const transporter = createEmailTransporter();
 
-  /* Vérification SMTP avant l'envoi */
+  /* Vérification de la connexion SMTP */
   await transporter.verify();
 
   const info = await transporter.sendMail({
