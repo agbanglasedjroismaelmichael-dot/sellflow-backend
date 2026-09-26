@@ -2,7 +2,8 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
-const nodemailer = require('nodemailer');
+
+const { Resend } = require('resend');
 
 const { testDatabaseConnection, getPool } = require('./config/database');
 const { initDatabase } = require('./database/init');
@@ -10,6 +11,20 @@ const authRoutes = require('./routes/auth');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
+
+/* =========================
+   RESEND
+========================= */
+
+function createEmailClient() {
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error(
+      'La variable RESEND_API_KEY n’est pas configurée.'
+    );
+  }
+
+  return new Resend(process.env.RESEND_API_KEY);
+}
 
 /* =========================
    CORS
@@ -44,9 +59,9 @@ app.get('/test-auth', async (_req, res) => {
       SELECT to_regclass('public.registration_requests') AS table_name
     `);
 
-    const gmailConfigured = Boolean(
-      process.env.EMAIL_USER &&
-      process.env.EMAIL_APP_PASSWORD
+    const emailConfigured = Boolean(
+      process.env.RESEND_API_KEY &&
+      process.env.EMAIL_FROM
     );
 
     res.json({
@@ -57,9 +72,10 @@ app.get('/test-auth', async (_req, res) => {
         tableCheck.rows[0].table_name
           ? 'exists'
           : 'missing',
-      gmail: gmailConfigured
-        ? 'configured'
-        : 'missing'
+      email:
+        emailConfigured
+          ? 'configured'
+          : 'missing'
     });
 
   } catch (error) {
@@ -83,7 +99,7 @@ app.get('/health', async (_req, res) => {
     res.json({
       ok: true,
       service: 'sellflow-backend',
-      version: '2.0.0',
+      version: '2.1.0',
       database: database.connected
         ? 'connected'
         : 'disconnected',
@@ -96,7 +112,7 @@ app.get('/health', async (_req, res) => {
     res.status(500).json({
       ok: false,
       service: 'sellflow-backend',
-      version: '2.0.0',
+      version: '2.1.0',
       database: 'disconnected',
       error: 'Connexion à la base de données impossible'
     });
@@ -104,48 +120,21 @@ app.get('/health', async (_req, res) => {
 });
 
 /* =========================
-   EMAIL GMAIL
-========================= */
-
-function createEmailTransporter() {
-  if (
-    !process.env.EMAIL_USER ||
-    !process.env.EMAIL_APP_PASSWORD
-  ) {
-    throw new Error(
-      'Les variables EMAIL_USER et EMAIL_APP_PASSWORD ne sont pas configurées.'
-    );
-  }
-
-  return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,
-    requireTLS: true,
-
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_APP_PASSWORD
-    },
-
-    connectionTimeout: 15000,
-    greetingTimeout: 15000,
-    socketTimeout: 20000
-  });
-}
-
-/* =========================
-   ENVOI EMAIL DE TEST
+   ENVOI EMAIL AVEC RESEND
 ========================= */
 
 async function sendTestEmail() {
-  const transporter = createEmailTransporter();
+  const resend = createEmailClient();
 
-  await transporter.verify();
+  if (!process.env.EMAIL_FROM) {
+    throw new Error(
+      'La variable EMAIL_FROM n’est pas configurée.'
+    );
+  }
 
-  const info = await transporter.sendMail({
-    from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-    to: process.env.EMAIL_USER,
+  const { data, error } = await resend.emails.send({
+    from: process.env.EMAIL_FROM,
+    to: [process.env.EMAIL_USER],
     subject: 'Test SellFlow AI',
 
     text:
@@ -175,15 +164,9 @@ async function sendTestEmail() {
           border-radius: 12px;
         ">
 
-          <h2 style="
-            margin-bottom: 20px;
-          ">
-            SellFlow AI
-          </h2>
+          <h2>SellFlow AI</h2>
 
-          <p style="
-            font-size: 18px;
-          ">
+          <p style="font-size: 18px;">
             Félicitations 🎉
           </p>
 
@@ -194,7 +177,7 @@ async function sendTestEmail() {
 
           <p>
             Votre serveur SellFlow AI peut maintenant
-            communiquer avec Gmail.
+            communiquer avec le service d'envoi d'emails.
           </p>
 
         </div>
@@ -204,11 +187,17 @@ async function sendTestEmail() {
     `
   });
 
-  return info.messageId;
+  if (error) {
+    throw new Error(
+      error.message || JSON.stringify(error)
+    );
+  }
+
+  return data.id;
 }
 
 /* =========================
-   TEST GMAIL
+   TEST EMAIL
 ========================= */
 
 app.get('/test-email', async (_req, res) => {
@@ -227,11 +216,7 @@ app.get('/test-email', async (_req, res) => {
     res.status(500).json({
       ok: false,
       error: 'Impossible d’envoyer l’email.',
-      details: error.message || null,
-      code: error.code || null,
-      command: error.command || null,
-      response: error.response || null,
-      responseCode: error.responseCode || null
+      details: error.message || null
     });
   }
 });
@@ -244,7 +229,7 @@ app.get('/', (_req, res) => {
   res.json({
     name: 'SellFlow AI API',
     status: 'online',
-    version: '2.0.0',
+    version: '2.1.0',
 
     endpoints: {
       health: 'GET /health',
@@ -310,7 +295,10 @@ async function startServer() {
     console.log('Base de données prête.');
 
     app.listen(PORT, () => {
-      console.log(`SellFlow API démarrée sur le port ${PORT}`);
+      console.log(
+        `SellFlow API démarrée sur le port ${PORT}`
+      );
+
       console.log(`Port: ${PORT}`);
     });
 
