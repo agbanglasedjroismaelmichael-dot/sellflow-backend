@@ -1,19 +1,37 @@
-const DATABASE_URL = process.env.DATABASE_URL || null;
+const { Pool } = require('pg');
 
-function getDatabaseConfig() {
-  if (!DATABASE_URL) {
-    return {
-      configured: false,
-      url: null
-    };
+let pool = null;
+
+function getPool() {
+  if (!pool) {
+    if (!process.env.DATABASE_URL) {
+      throw new Error('DATABASE_URL n’est pas configurée.');
+    }
+
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl:
+        process.env.NODE_ENV === 'production'
+          ? { rejectUnauthorized: false }
+          : false
+    });
   }
 
+  return pool;
+}
+
+async function testDatabaseConnection() {
+  const db = getPool();
+
+  const result = await db.query('SELECT NOW() AS now');
+
   return {
-    configured: true,
-    url: DATABASE_URL
+    connected: true,
+    time: result.rows[0].now
   };
 }
 
 module.exports = {
-  getDatabaseConfig
+  getPool,
+  testDatabaseConnection
 };
