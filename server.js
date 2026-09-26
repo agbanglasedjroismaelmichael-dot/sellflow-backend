@@ -7,34 +7,54 @@ const { Resend } = require('resend');
 const { testDatabaseConnection, getPool } = require('./config/database');
 const { initDatabase } = require('./database/init');
 
-const authModule = require('./routes/auth');
-const authRoutes = authModule.router || authModule;
-
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-app.use(
-cors({
-origin: process.env.CORS_ORIGIN || '*',
-credentials: true
-})
-);
+app.use(cors({
+origin: '*'
+}));
 
 app.use(express.json({ limit: '1mb' }));
 
-app.use('/auth', authRoutes);
+/* =========================
+DATABASE
+========================= */
 
-function createEmailClient() {
-if (!process.env.RESEND_API_KEY) {
-throw new Error(
-'La variable RESEND_API_KEY n’est pas configurée.'
-);
+app.get('/health', async (req, res) => {
+try {
+const database = await testDatabaseConnection();
+
+```
+res.json({
+  ok: true,
+  service: 'sellflow-backend',
+  version: '2.1.0',
+  database: database.connected ? 'connected' : 'disconnected',
+  time: new Date().toISOString()
+});
+```
+
+} catch (error) {
+console.error(error);
+
+```
+res.status(500).json({
+  ok: false,
+  service: 'sellflow-backend',
+  version: '2.1.0',
+  database: 'disconnected',
+  error: error.message
+});
+```
+
 }
+});
 
-return new Resend(process.env.RESEND_API_KEY);
-}
+/* =========================
+TEST AUTH
+========================= */
 
-app.get('/test-auth', async (_req, res) => {
+app.get('/test-auth', async (req, res) => {
 try {
 const db = getPool();
 
@@ -45,28 +65,23 @@ const tableCheck = await db.query(
   "SELECT to_regclass('public.registration_requests') AS table_name"
 );
 
-const emailConfigured = Boolean(
-  process.env.RESEND_API_KEY &&
-  process.env.EMAIL_FROM &&
-  process.env.EMAIL_USER
-);
-
 res.json({
   ok: true,
-  authRoutes: 'loaded',
+  authRoutes: 'not-loaded',
   database: 'connected',
   registrationRequestsTable:
     tableCheck.rows[0].table_name
       ? 'exists'
       : 'missing',
-  email: emailConfigured
-    ? 'configured'
-    : 'missing'
+  email:
+    process.env.RESEND_API_KEY && process.env.EMAIL_FROM
+      ? 'configured'
+      : 'missing'
 });
 ```
 
 } catch (error) {
-console.error('Erreur test-auth:', error);
+console.error(error);
 
 ```
 res.status(500).json({
@@ -78,129 +93,77 @@ res.status(500).json({
 }
 });
 
-app.get('/health', async (_req, res) => {
+/* =========================
+RESEND
+========================= */
+
+app.get('/test-email', async (req, res) => {
 try {
-const database = await testDatabaseConnection();
-
-```
-res.json({
-  ok: true,
-  service: 'sellflow-backend',
-  version: '2.1.0',
-  database: database.connected
-    ? 'connected'
-    : 'disconnected',
-  time: new Date().toISOString()
+if (!process.env.RESEND_API_KEY) {
+return res.status(500).json({
+ok: false,
+error: 'RESEND_API_KEY manquante dans Render.'
 });
-```
-
-} catch (error) {
-console.error('Erreur PostgreSQL:', error);
-
-```
-res.status(500).json({
-  ok: false,
-  service: 'sellflow-backend',
-  version: '2.1.0',
-  database: 'disconnected',
-  error: 'Connexion à la base de données impossible'
-});
-```
-
 }
-});
 
-async function sendTestEmail() {
-const resend = createEmailClient();
-
+```
 if (!process.env.EMAIL_FROM) {
-throw new Error(
-'La variable EMAIL_FROM n’est pas configurée.'
-);
+  return res.status(500).json({
+    ok: false,
+    error: 'EMAIL_FROM manquante dans Render.'
+  });
 }
 
 if (!process.env.EMAIL_USER) {
-throw new Error(
-'La variable EMAIL_USER n’est pas configurée.'
-);
+  return res.status(500).json({
+    ok: false,
+    error: 'EMAIL_USER manquante dans Render.'
+  });
 }
 
-const { data, error } = await resend.emails.send({
-from: process.env.EMAIL_FROM,
-to: [process.env.EMAIL_USER],
-subject: 'Test SellFlow AI',
-text:
-'Félicitations ! SellFlow AI peut maintenant envoyer des emails.',
-html: ` <!DOCTYPE html> <html lang="fr"> <head> <meta charset="UTF-8"> <title>Test SellFlow AI</title> </head> <body style="
-     margin:0;
-     padding:0;
-     background:#f3f4f6;
-     font-family:Arial,sans-serif;
-   "> <div style="
-       max-width:600px;
-       margin:40px auto;
-       padding:30px;
-       background:#ffffff;
-       color:#111827;
-       border-radius:12px;
-     "> <h2>SellFlow AI</h2>
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-```
-      <p style="font-size:18px;">
-        Félicitations 🎉
-      </p>
-
-      <p>
-        L'envoi d'emails depuis le backend fonctionne correctement.
-      </p>
-
-      <p>
-        Votre serveur SellFlow AI peut maintenant envoyer des emails avec Resend.
-      </p>
-    </div>
-  </body>
-  </html>
-`
-```
-
+const result = await resend.emails.send({
+  from: process.env.EMAIL_FROM,
+  to: [process.env.EMAIL_USER],
+  subject: 'Test SellFlow AI',
+  text: 'Félicitations ! SellFlow AI peut envoyer des emails.'
 });
 
-if (error) {
-throw new Error(
-error.message || JSON.stringify(error)
-);
+if (result.error) {
+  return res.status(500).json({
+    ok: false,
+    error: result.error.message || 'Erreur Resend',
+    details: result.error
+  });
 }
 
-return data.id;
-}
-
-app.get('/test-email', async (_req, res) => {
-try {
-const messageId = await sendTestEmail();
-
-```
 res.json({
   ok: true,
-  message: 'Email de test envoyé.',
-  messageId
+  message: 'Email envoyé avec succès.',
+  messageId: result.data ? result.data.id : null
 });
 ```
 
 } catch (error) {
-console.error('Erreur email:', error);
+console.error('Erreur Resend:', error);
 
 ```
 res.status(500).json({
   ok: false,
   error: 'Impossible d’envoyer l’email.',
-  details: error.message || null
+  details: error.message
 });
 ```
 
 }
 });
 
-app.get('/', (_req, res) => {
+/* =========================
+ROOT
+========================= */
+
+app.get('/', (req, res) => {
 res.json({
 name: 'SellFlow AI API',
 status: 'online',
@@ -208,34 +171,24 @@ version: '2.1.0',
 endpoints: {
 health: 'GET /health',
 testAuth: 'GET /test-auth',
-testEmail: 'GET /test-email',
-registerRequestCode:
-'POST /auth/register/request-code',
-registerVerifyCode:
-'POST /auth/register/verify-code',
-registerComplete:
-'POST /auth/register/complete',
-login:
-'POST /auth/login',
-me:
-'GET /auth/me'
+testEmail: 'GET /test-email'
 }
 });
 });
 
-app.use((_req, res) => {
+/* =========================
+404
+========================= */
+
+app.use((req, res) => {
 res.status(404).json({
 error: 'Route introuvable'
 });
 });
 
-app.use((err, _req, res, _next) => {
-console.error('Erreur serveur:', err);
-
-res.status(500).json({
-error: 'Erreur serveur'
-});
-});
+/* =========================
+START
+========================= */
 
 async function startServer() {
 try {
@@ -253,24 +206,13 @@ await initDatabase();
 console.log('Base de données prête.');
 
 app.listen(PORT, () => {
-  console.log(
-    `SellFlow API démarrée sur le port ${PORT}`
-  );
-
-  console.log(`Port: ${PORT}`);
+  console.log(`SellFlow API démarrée sur le port ${PORT}`);
 });
 ```
 
 } catch (error) {
-console.error(
-'Impossible de démarrer SellFlow:',
-error
-);
-
-```
+console.error('Impossible de démarrer SellFlow:', error);
 process.exit(1);
-```
-
 }
 }
 
