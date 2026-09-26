@@ -28,6 +28,19 @@ async function initDatabase() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS registration_requests (
+      id UUID PRIMARY KEY,
+      name VARCHAR(120) NOT NULL,
+      email VARCHAR(255) NOT NULL,
+      phone VARCHAR(30) NOT NULL,
+      country VARCHAR(100) NOT NULL,
+      code_hash TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      verified BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS sessions (
       id UUID PRIMARY KEY,
       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -66,6 +79,9 @@ async function initDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_verification_email
       ON email_verification_codes(email);
+
+    CREATE INDEX IF NOT EXISTS idx_registration_requests_email
+      ON registration_requests(email);
 
     CREATE INDEX IF NOT EXISTS idx_sessions_user
       ON sessions(user_id);
