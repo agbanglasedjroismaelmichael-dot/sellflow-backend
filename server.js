@@ -11,6 +11,10 @@ const authRoutes = require('./routes/auth');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+/* =========================
+   CORS
+========================= */
+
 app.use(
   cors({
     origin: process.env.CORS_ORIGIN || '*',
@@ -116,20 +120,19 @@ function createEmailTransporter() {
   return nodemailer.createTransport({
     host: 'smtp.gmail.com',
 
-    /* Gmail SMTP avec STARTTLS */
+    // Gmail SMTP avec STARTTLS
     port: 587,
 
-    /* IMPORTANT :
-       false = connexion initiale non chiffrée,
-       puis STARTTLS est utilisé. */
+    // STARTTLS
     secure: false,
+
+    // Force STARTTLS
+    requireTLS: true,
 
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_APP_PASSWORD
     },
-
-    requireTLS: true,
 
     connectionTimeout: 15000,
     greetingTimeout: 15000,
@@ -137,10 +140,14 @@ function createEmailTransporter() {
   });
 }
 
+/* =========================
+   ENVOI EMAIL DE TEST
+========================= */
+
 async function sendTestEmail() {
   const transporter = createEmailTransporter();
 
-  /* Vérification de la connexion SMTP */
+  // Vérification de la connexion SMTP
   await transporter.verify();
 
   const info = await transporter.sendMail({
@@ -157,19 +164,19 @@ async function sendTestEmail() {
 
     html: `
       <div style="
-        font-family:Arial,sans-serif;
-        max-width:600px;
-        margin:auto;
-        padding:30px;
-        background:#ffffff;
-        color:#111827
+        font-family: Arial, sans-serif;
+        max-width: 600px;
+        margin: auto;
+        padding: 30px;
+        background: #ffffff;
+        color: #111827;
       ">
 
-        <h2 style="margin-bottom:20px;">
+        <h2 style="margin-bottom: 20px;">
           SellFlow AI
         </h2>
 
-        <p style="font-size:18px;">
+        <p style="font-size: 18px;">
           Félicitations 🎉
         </p>
 
