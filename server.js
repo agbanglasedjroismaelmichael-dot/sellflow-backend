@@ -119,14 +119,8 @@ function createEmailTransporter() {
 
   return nodemailer.createTransport({
     host: 'smtp.gmail.com',
-
-    // Gmail SMTP avec STARTTLS
     port: 587,
-
-    // STARTTLS
     secure: false,
-
-    // Force STARTTLS
     requireTLS: true,
 
     auth: {
@@ -147,50 +141,66 @@ function createEmailTransporter() {
 async function sendTestEmail() {
   const transporter = createEmailTransporter();
 
-  // Vérification de la connexion SMTP
   await transporter.verify();
 
   const info = await transporter.sendMail({
-    from:
-      process.env.EMAIL_FROM ||
-      process.env.EMAIL_USER,
-
+    from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
     to: process.env.EMAIL_USER,
-
     subject: 'Test SellFlow AI',
 
     text:
       'Félicitations ! SellFlow AI peut maintenant envoyer des emails.',
 
     html: `
-      <div style="
+      <!DOCTYPE html>
+      <html lang="fr">
+      <head>
+        <meta charset="UTF-8">
+        <title>Test SellFlow AI</title>
+      </head>
+
+      <body style="
+        margin: 0;
+        padding: 0;
+        background: #f3f4f6;
         font-family: Arial, sans-serif;
-        max-width: 600px;
-        margin: auto;
-        padding: 30px;
-        background: #ffffff;
-        color: #111827;
       ">
 
-        <h2 style="margin-bottom: 20px;">
-          SellFlow AI
-        </h2>
+        <div style="
+          max-width: 600px;
+          margin: 40px auto;
+          padding: 30px;
+          background: #ffffff;
+          color: #111827;
+          border-radius: 12px;
+        ">
 
-        <p style="font-size: 18px;">
-          Félicitations 🎉
-        </p>
+          <h2 style="
+            margin-bottom: 20px;
+          ">
+            SellFlow AI
+          </h2>
 
-        <p>
-          L'envoi d'emails depuis le backend
-          fonctionne correctement.
-        </p>
+          <p style="
+            font-size: 18px;
+          ">
+            Félicitations 🎉
+          </p>
 
-        <p>
-          Votre serveur SellFlow AI peut maintenant
-          communiquer avec Gmail.
-        </p>
+          <p>
+            L'envoi d'emails depuis le backend
+            fonctionne correctement.
+          </p>
 
-      </div>
+          <p>
+            Votre serveur SellFlow AI peut maintenant
+            communiquer avec Gmail.
+          </p>
+
+        </div>
+
+      </body>
+      </html>
     `
   });
 
@@ -217,15 +227,10 @@ app.get('/test-email', async (_req, res) => {
     res.status(500).json({
       ok: false,
       error: 'Impossible d’envoyer l’email.',
-
       details: error.message || null,
-
       code: error.code || null,
-
       command: error.command || null,
-
       response: error.response || null,
-
       responseCode: error.responseCode || null
     });
   }
@@ -243,9 +248,7 @@ app.get('/', (_req, res) => {
 
     endpoints: {
       health: 'GET /health',
-
       testAuth: 'GET /test-auth',
-
       testEmail: 'GET /test-email',
 
       registerRequestCode:
@@ -307,10 +310,7 @@ async function startServer() {
     console.log('Base de données prête.');
 
     app.listen(PORT, () => {
-      console.log(
-        `SellFlow API démarrée sur le port ${PORT}`
-      );
-
+      console.log(`SellFlow API démarrée sur le port ${PORT}`);
       console.log(`Port: ${PORT}`);
     });
 
