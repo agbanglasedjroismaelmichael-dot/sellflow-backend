@@ -2,218 +2,235 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
-const { Resend } = require('resend');
+const Resend = require('resend').Resend;
 
-const { testDatabaseConnection, getPool } = require('./config/database');
-const { initDatabase } = require('./database/init');
+const database = require('./config/database');
+const databaseInit = require('./database/init');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-app.use(cors({
-origin: '*'
-}));
+/* =========================
+   CORS
+========================= */
+
+app.use(
+  cors({
+    origin: '*'
+  })
+);
 
 app.use(express.json({ limit: '1mb' }));
 
 /* =========================
-DATABASE
+   ROOT
 ========================= */
 
-app.get('/health', async (req, res) => {
-try {
-const database = await testDatabaseConnection();
-
-```
-res.json({
-  ok: true,
-  service: 'sellflow-backend',
-  version: '2.1.0',
-  database: database.connected ? 'connected' : 'disconnected',
-  time: new Date().toISOString()
-});
-```
-
-} catch (error) {
-console.error(error);
-
-```
-res.status(500).json({
-  ok: false,
-  service: 'sellflow-backend',
-  version: '2.1.0',
-  database: 'disconnected',
-  error: error.message
-});
-```
-
-}
-});
-
-/* =========================
-TEST AUTH
-========================= */
-
-app.get('/test-auth', async (req, res) => {
-try {
-const db = getPool();
-
-```
-await db.query('SELECT 1');
-
-const tableCheck = await db.query(
-  "SELECT to_regclass('public.registration_requests') AS table_name"
-);
-
-res.json({
-  ok: true,
-  authRoutes: 'not-loaded',
-  database: 'connected',
-  registrationRequestsTable:
-    tableCheck.rows[0].table_name
-      ? 'exists'
-      : 'missing',
-  email:
-    process.env.RESEND_API_KEY && process.env.EMAIL_FROM
-      ? 'configured'
-      : 'missing'
-});
-```
-
-} catch (error) {
-console.error(error);
-
-```
-res.status(500).json({
-  ok: false,
-  error: error.message
-});
-```
-
-}
-});
-
-/* =========================
-RESEND
-========================= */
-
-app.get('/test-email', async (req, res) => {
-try {
-if (!process.env.RESEND_API_KEY) {
-return res.status(500).json({
-ok: false,
-error: 'RESEND_API_KEY manquante dans Render.'
-});
-}
-
-```
-if (!process.env.EMAIL_FROM) {
-  return res.status(500).json({
-    ok: false,
-    error: 'EMAIL_FROM manquante dans Render.'
+app.get('/', function (req, res) {
+  res.json({
+    name: 'SellFlow AI API',
+    status: 'online',
+    version: '2.1.0',
+    endpoints: {
+      health: 'GET /health',
+      testAuth: 'GET /test-auth',
+      testEmail: 'GET /test-email'
+    }
   });
-}
-
-if (!process.env.EMAIL_USER) {
-  return res.status(500).json({
-    ok: false,
-    error: 'EMAIL_USER manquante dans Render.'
-  });
-}
-
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-const result = await resend.emails.send({
-  from: process.env.EMAIL_FROM,
-  to: [process.env.EMAIL_USER],
-  subject: 'Test SellFlow AI',
-  text: 'Félicitations ! SellFlow AI peut envoyer des emails.'
-});
-
-if (result.error) {
-  return res.status(500).json({
-    ok: false,
-    error: result.error.message || 'Erreur Resend',
-    details: result.error
-  });
-}
-
-res.json({
-  ok: true,
-  message: 'Email envoyé avec succès.',
-  messageId: result.data ? result.data.id : null
-});
-```
-
-} catch (error) {
-console.error('Erreur Resend:', error);
-
-```
-res.status(500).json({
-  ok: false,
-  error: 'Impossible d’envoyer l’email.',
-  details: error.message
-});
-```
-
-}
 });
 
 /* =========================
-ROOT
+   HEALTH
 ========================= */
 
-app.get('/', (req, res) => {
-res.json({
-name: 'SellFlow AI API',
-status: 'online',
-version: '2.1.0',
-endpoints: {
-health: 'GET /health',
-testAuth: 'GET /test-auth',
-testEmail: 'GET /test-email'
-}
-});
+app.get('/health', async function (req, res) {
+  try {
+    const result = await database.testDatabaseConnection();
+
+    res.json({
+      ok: true,
+      service: 'sellflow-backend',
+      version: '2.1.0',
+      database: result.connected ? 'connected' : 'disconnected',
+      time: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Erreur PostgreSQL:', error);
+
+    res.status(500).json({
+      ok: false,
+      service: 'sellflow-backend',
+      version: '2.1.0',
+      database: 'disconnected',
+      error: error.message
+    });
+  }
 });
 
 /* =========================
-404
+   TEST AUTH / DATABASE
 ========================= */
 
-app.use((req, res) => {
-res.status(404).json({
-error: 'Route introuvable'
-});
+app.get('/test-auth', async function (req, res) {
+  try {
+    const db = database.getPool();
+
+    await db.query('SELECT 1');
+
+    const tableCheck = await db.query(
+      "SELECT to_regclass('public.registration_requests') AS table_name"
+    );
+
+    res.json({
+      ok: true,
+      authRoutes: 'temporarily-disabled',
+      database: 'connected',
+      registrationRequestsTable:
+        tableCheck.rows[0].table_name
+          ? 'exists'
+          : 'missing',
+      email:
+        process.env.RESEND_API_KEY &&
+        process.env.EMAIL_FROM &&
+        process.env.EMAIL_USER
+          ? 'configured'
+          : 'missing'
+    });
+  } catch (error) {
+    console.error('Erreur test-auth:', error);
+
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
 });
 
 /* =========================
-START
+   TEST RESEND
+========================= */
+
+app.get('/test-email', async function (req, res) {
+  try {
+    if (!process.env.RESEND_API_KEY) {
+      return res.status(500).json({
+        ok: false,
+        error: 'RESEND_API_KEY manquante dans Render.'
+      });
+    }
+
+    if (!process.env.EMAIL_FROM) {
+      return res.status(500).json({
+        ok: false,
+        error: 'EMAIL_FROM manquante dans Render.'
+      });
+    }
+
+    if (!process.env.EMAIL_USER) {
+      return res.status(500).json({
+        ok: false,
+        error: 'EMAIL_USER manquante dans Render.'
+      });
+    }
+
+    const resend = new Resend(
+      process.env.RESEND_API_KEY
+    );
+
+    const result = await resend.emails.send({
+      from: process.env.EMAIL_FROM,
+      to: [process.env.EMAIL_USER],
+      subject: 'Test SellFlow AI',
+      text:
+        'Félicitations ! SellFlow AI peut maintenant envoyer des emails.'
+    });
+
+    if (result.error) {
+      return res.status(500).json({
+        ok: false,
+        error:
+          result.error.message ||
+          'Erreur Resend',
+        details: result.error
+      });
+    }
+
+    res.json({
+      ok: true,
+      message: 'Email envoyé avec succès.',
+      messageId:
+        result.data && result.data.id
+          ? result.data.id
+          : null
+    });
+  } catch (error) {
+    console.error('Erreur Resend:', error);
+
+    res.status(500).json({
+      ok: false,
+      error: 'Impossible d’envoyer l’email.',
+      details: error.message || null
+    });
+  }
+});
+
+/* =========================
+   404
+========================= */
+
+app.use(function (req, res) {
+  res.status(404).json({
+    error: 'Route introuvable'
+  });
+});
+
+/* =========================
+   ERROR HANDLER
+========================= */
+
+app.use(function (err, req, res, next) {
+  console.error('Erreur serveur:', err);
+
+  res.status(500).json({
+    error: 'Erreur serveur',
+    details: err.message || null
+  });
+});
+
+/* =========================
+   START SERVER
 ========================= */
 
 async function startServer() {
-try {
-console.log('Connexion à PostgreSQL...');
+  try {
+    console.log('Connexion à PostgreSQL...');
 
-```
-await testDatabaseConnection();
+    await database.testDatabaseConnection();
 
-console.log('PostgreSQL connecté.');
+    console.log('PostgreSQL connecté.');
 
-console.log('Initialisation de la base de données...');
+    console.log('Initialisation de la base de données...');
 
-await initDatabase();
+    await databaseInit.initDatabase();
 
-console.log('Base de données prête.');
+    console.log('Base de données prête.');
 
-app.listen(PORT, () => {
-  console.log(`SellFlow API démarrée sur le port ${PORT}`);
-});
-```
+    app.listen(PORT, function () {
+      console.log(
+        'SellFlow API démarrée sur le port ' +
+        PORT
+      );
 
-} catch (error) {
-console.error('Impossible de démarrer SellFlow:', error);
-process.exit(1);
-}
+      console.log('Port: ' + PORT);
+    });
+  } catch (error) {
+    console.error(
+      'Impossible de démarrer SellFlow:',
+      error
+    );
+
+    process.exit(1);
+  }
 }
 
 startServer();
