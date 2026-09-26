@@ -183,4 +183,106 @@ app.get('/test-email', async (_req, res) => {
 
     res.status(500).json({
       ok: false,
-      error: 'Impossible d’env
+      error: 'Impossible d’envoyer l’email.',
+      details:
+        process.env.NODE_ENV === 'production'
+          ? undefined
+          : error.message
+    });
+  }
+});
+
+/* =========================
+   ROOT
+========================= */
+
+app.get('/', (_req, res) => {
+  res.json({
+    name: 'SellFlow AI API',
+    status: 'online',
+    version: '2.0.0',
+
+    endpoints: {
+      health: 'GET /health',
+
+      testAuth: 'GET /test-auth',
+
+      testEmail: 'GET /test-email',
+
+      registerRequestCode:
+        'POST /auth/register/request-code',
+
+      registerVerifyCode:
+        'POST /auth/register/verify-code',
+
+      registerComplete:
+        'POST /auth/register/complete',
+
+      login:
+        'POST /auth/login',
+
+      me:
+        'GET /auth/me'
+    }
+  });
+});
+
+/* =========================
+   404
+========================= */
+
+app.use((_req, res) => {
+  res.status(404).json({
+    error: 'Route introuvable'
+  });
+});
+
+/* =========================
+   ERROR HANDLER
+========================= */
+
+app.use((err, _req, res, _next) => {
+  console.error('Erreur serveur:', err);
+
+  res.status(500).json({
+    error: 'Erreur serveur'
+  });
+});
+
+/* =========================
+   START SERVER
+========================= */
+
+async function startServer() {
+  try {
+    console.log('Connexion à PostgreSQL...');
+
+    await testDatabaseConnection();
+
+    console.log('PostgreSQL connecté.');
+
+    console.log('Initialisation de la base de données...');
+
+    await initDatabase();
+
+    console.log('Base de données prête.');
+
+    app.listen(PORT, () => {
+      console.log(
+        `SellFlow API démarrée sur le port ${PORT}`
+      );
+
+      console.log(`Port: ${PORT}`);
+    });
+
+  } catch (error) {
+    console.error(
+      'Impossible de démarrer SellFlow:',
+      error
+    );
+
+    process.exit(1);
+  }
+}
+
+startServer();
