@@ -2,35 +2,16 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
-
 const { Resend } = require('resend');
 
 const { testDatabaseConnection, getPool } = require('./config/database');
 const { initDatabase } = require('./database/init');
-
-/* =========================
-AUTH ROUTES
-========================= */
 
 const authModule = require('./routes/auth');
 const authRoutes = authModule.router || authModule;
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-
-/* =========================
-RESEND
-========================= */
-
-function createEmailClient() {
-if (!process.env.RESEND_API_KEY) {
-throw new Error(
-'La variable RESEND_API_KEY n’est pas configurée.'
-);
-}
-
-return new Resend(process.env.RESEND_API_KEY);
-}
 
 /* =========================
 CORS
@@ -52,6 +33,20 @@ AUTHENTIFICATION
 app.use('/auth', authRoutes);
 
 /* =========================
+RESEND
+========================= */
+
+function createEmailClient() {
+if (!process.env.RESEND_API_KEY) {
+throw new Error(
+'La variable RESEND_API_KEY n’est pas configurée.'
+);
+}
+
+return new Resend(process.env.RESEND_API_KEY);
+}
+
+/* =========================
 TEST AUTHENTIFICATION
 ========================= */
 
@@ -62,13 +57,14 @@ const db = getPool();
 ```
 await db.query('SELECT 1');
 
-const tableCheck = await db.query(`
-  SELECT to_regclass('public.registration_requests') AS table_name
-`);
+const tableCheck = await db.query(
+  "SELECT to_regclass('public.registration_requests') AS table_name"
+);
 
 const emailConfigured = Boolean(
   process.env.RESEND_API_KEY &&
-  process.env.EMAIL_FROM
+  process.env.EMAIL_FROM &&
+  process.env.EMAIL_USER
 );
 
 res.json({
@@ -99,7 +95,7 @@ res.status(500).json({
 });
 
 /* =========================
-DATABASE
+HEALTH
 ========================= */
 
 app.get('/health', async (_req, res) => {
@@ -135,7 +131,7 @@ res.status(500).json({
 });
 
 /* =========================
-ENVOI EMAIL AVEC RESEND
+ENVOI EMAIL TEST AVEC RESEND
 ========================= */
 
 async function sendTestEmail() {
@@ -199,7 +195,7 @@ html: `
 
       <p>
         Votre serveur SellFlow AI peut maintenant
-        communiquer avec le service d'envoi d'emails.
+        envoyer des emails avec Resend.
       </p>
 
     </div>
