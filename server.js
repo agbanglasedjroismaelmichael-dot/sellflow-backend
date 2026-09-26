@@ -13,10 +13,6 @@ const authRoutes = authModule.router || authModule;
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-/* =========================
-CORS
-========================= */
-
 app.use(
 cors({
 origin: process.env.CORS_ORIGIN || '*',
@@ -26,15 +22,7 @@ credentials: true
 
 app.use(express.json({ limit: '1mb' }));
 
-/* =========================
-AUTHENTIFICATION
-========================= */
-
 app.use('/auth', authRoutes);
-
-/* =========================
-RESEND
-========================= */
 
 function createEmailClient() {
 if (!process.env.RESEND_API_KEY) {
@@ -45,10 +33,6 @@ throw new Error(
 
 return new Resend(process.env.RESEND_API_KEY);
 }
-
-/* =========================
-TEST AUTHENTIFICATION
-========================= */
 
 app.get('/test-auth', async (_req, res) => {
 try {
@@ -94,10 +78,6 @@ res.status(500).json({
 }
 });
 
-/* =========================
-HEALTH
-========================= */
-
 app.get('/health', async (_req, res) => {
 try {
 const database = await testDatabaseConnection();
@@ -130,10 +110,6 @@ res.status(500).json({
 }
 });
 
-/* =========================
-ENVOI EMAIL TEST AVEC RESEND
-========================= */
-
 async function sendTestEmail() {
 const resend = createEmailClient();
 
@@ -153,53 +129,35 @@ const { data, error } = await resend.emails.send({
 from: process.env.EMAIL_FROM,
 to: [process.env.EMAIL_USER],
 subject: 'Test SellFlow AI',
+text:
+'Félicitations ! SellFlow AI peut maintenant envoyer des emails.',
+html: ` <!DOCTYPE html> <html lang="fr"> <head> <meta charset="UTF-8"> <title>Test SellFlow AI</title> </head> <body style="
+     margin:0;
+     padding:0;
+     background:#f3f4f6;
+     font-family:Arial,sans-serif;
+   "> <div style="
+       max-width:600px;
+       margin:40px auto;
+       padding:30px;
+       background:#ffffff;
+       color:#111827;
+       border-radius:12px;
+     "> <h2>SellFlow AI</h2>
 
 ```
-text:
-  'Félicitations ! SellFlow AI peut maintenant envoyer des emails.',
-
-html: `
-  <!DOCTYPE html>
-  <html lang="fr">
-  <head>
-    <meta charset="UTF-8">
-    <title>Test SellFlow AI</title>
-  </head>
-
-  <body style="
-    margin: 0;
-    padding: 0;
-    background: #f3f4f6;
-    font-family: Arial, sans-serif;
-  ">
-
-    <div style="
-      max-width: 600px;
-      margin: 40px auto;
-      padding: 30px;
-      background: #ffffff;
-      color: #111827;
-      border-radius: 12px;
-    ">
-
-      <h2>SellFlow AI</h2>
-
-      <p style="font-size: 18px;">
+      <p style="font-size:18px;">
         Félicitations 🎉
       </p>
 
       <p>
-        L'envoi d'emails depuis le backend
-        fonctionne correctement.
+        L'envoi d'emails depuis le backend fonctionne correctement.
       </p>
 
       <p>
-        Votre serveur SellFlow AI peut maintenant
-        envoyer des emails avec Resend.
+        Votre serveur SellFlow AI peut maintenant envoyer des emails avec Resend.
       </p>
-
     </div>
-
   </body>
   </html>
 `
@@ -215,10 +173,6 @@ error.message || JSON.stringify(error)
 
 return data.id;
 }
-
-/* =========================
-TEST EMAIL
-========================= */
 
 app.get('/test-email', async (_req, res) => {
 try {
@@ -246,55 +200,34 @@ res.status(500).json({
 }
 });
 
-/* =========================
-ROOT
-========================= */
-
 app.get('/', (_req, res) => {
 res.json({
 name: 'SellFlow AI API',
 status: 'online',
 version: '2.1.0',
-
-```
 endpoints: {
-  health: 'GET /health',
-  testAuth: 'GET /test-auth',
-  testEmail: 'GET /test-email',
-
-  registerRequestCode:
-    'POST /auth/register/request-code',
-
-  registerVerifyCode:
-    'POST /auth/register/verify-code',
-
-  registerComplete:
-    'POST /auth/register/complete',
-
-  login:
-    'POST /auth/login',
-
-  me:
-    'GET /auth/me'
+health: 'GET /health',
+testAuth: 'GET /test-auth',
+testEmail: 'GET /test-email',
+registerRequestCode:
+'POST /auth/register/request-code',
+registerVerifyCode:
+'POST /auth/register/verify-code',
+registerComplete:
+'POST /auth/register/complete',
+login:
+'POST /auth/login',
+me:
+'GET /auth/me'
 }
-```
-
 });
 });
-
-/* =========================
-404
-========================= */
 
 app.use((_req, res) => {
 res.status(404).json({
 error: 'Route introuvable'
 });
 });
-
-/* =========================
-ERROR HANDLER
-========================= */
 
 app.use((err, _req, res, _next) => {
 console.error('Erreur serveur:', err);
@@ -303,10 +236,6 @@ res.status(500).json({
 error: 'Erreur serveur'
 });
 });
-
-/* =========================
-START SERVER
-========================= */
 
 async function startServer() {
 try {
