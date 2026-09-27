@@ -155,8 +155,7 @@ async function sendVerificationEmail({
   }
 
   return result;
-}
-
+              }
 /* =========================================================
    INSCRIPTION — DEMANDE DE CODE
 ========================================================= */
@@ -210,8 +209,6 @@ router.post(
         });
       }
 
-      /* Vérifie si le compte existe déjà */
-
       const existingUser =
         await db.query(
           `
@@ -230,8 +227,6 @@ router.post(
             'Un compte existe déjà avec cette adresse e-mail.'
         });
       }
-
-      /* Empêche les demandes trop rapprochées */
 
       const recent =
         await db.query(
@@ -254,11 +249,6 @@ router.post(
             'Attends environ 1 minute avant de demander un nouveau code.'
         });
       }
-
-      /*
-        MODE TEST :
-        code fixe 000000.
-      */
 
       const code =
         isDevAuthBypassEnabled()
@@ -308,8 +298,6 @@ router.post(
         ]
       );
 
-      /* MODE TEST */
-
       if (isDevAuthBypassEnabled()) {
         console.log(
           `⚠️ DEV_AUTH_BYPASS actif — code de test pour ${normalizedEmail}: 000000`
@@ -325,8 +313,6 @@ router.post(
           test_code: '000000'
         });
       }
-
-      /* MODE NORMAL */
 
       await sendVerificationEmail({
         email: normalizedEmail,
@@ -535,7 +521,6 @@ router.post(
     }
   }
 );
-
 /* =========================================================
    INSCRIPTION — CRÉATION DU COMPTE
 ========================================================= */
@@ -974,4 +959,319 @@ router.post(
         return res.status(401).json({
           ok: false,
           message:
-            'Ce compte ne possède pas encore de mot de 
+            'Ce compte ne possède pas encore de mot de passe.'
+        });
+      }
+
+      const valid =
+        await verifyPassword(
+          password,
+          user.password_hash
+        );
+
+      if (!valid) {
+        return res.status(401).json({
+          ok: false,
+          message:
+            'E-mail ou mot de passe incorrect.'
+        });
+      }
+
+      const token =
+        signToken(user);
+
+      return res.json({
+        ok: true,
+        token,
+        user: publicUser(user)
+      });
+
+    } catch (error) {
+      console.error(
+        'Erreur login:',
+        error
+      );
+
+      return res.status(500).json({
+        ok: false,
+        message:
+          'Impossible de se connecter.'
+      });
+    }
+  }
+);
+
+/* =========================================================
+   PROFIL CONNECTÉ
+========================================================= */
+
+router.get(
+  '/me',
+  async (req, res) => {
+    try {
+      const db = getPool();
+
+      const auth =
+        req.headers.authorization || '';
+
+      if (
+        !auth.startsWith('Bearer ')
+      ) {
+        return res.status(401).json({
+          ok: false,
+          message:
+            'Token manquant.'
+        });
+      }
+
+      const token =
+        auth.substring(7).trim();
+
+      if (!token) {
+        return res.status(401).json({
+          ok: false,
+          message:
+            'Token manquant.'
+        });
+      }
+
+      const decoded =
+        verifyToken(token);
+
+      if (
+        !decoded ||
+        !decoded.sub
+      ) {
+        return res.status(401).json({
+          ok: false,
+          message:
+            'Session invalide ou expirée.'
+        });
+      }
+
+      const userId =
+        decoded.sub;
+
+      const result =
+        await db.query(
+          `
+          SELECT
+            id,
+            name,
+            email,
+            phone,
+            country,
+            email_verified,
+            plan,
+            created_at
+          FROM users
+          WHERE id = $1
+          LIMIT 1
+          `,
+          [userId]
+        );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          ok: false,
+          message:
+            'Utilisateur introuvable.'
+        });
+      }
+
+      return res.json({
+        ok: true,
+        user:
+          publicUser(
+            result.rows[0]
+          )
+      });
+
+    } catch (error) {
+      console.error(
+        'Erreur auth/me:',
+        error
+      );
+
+      return res.status(401).json({
+        ok: false,
+        message:
+          'Session invalide ou expirée.'
+      });
+    }
+  }
+);
+/* =========================================================
+   GOOGLE OAUTH GMAIL
+   Conservé pour plus tard
+========================================================= */
+
+function createGoogleOAuthClient() {
+  if (
+    !process.env.GOOGLE_CLIENT_ID ||
+    !process.env.GOOGLE_CLIENT_SECRET ||
+    !process.env.GOOGLE_REDIRECT_URI
+  ) {
+    throw new Error(
+      'Les variables Google OAuth ne sont pas configurées.'
+    );
+  }
+
+  return new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+}
+
+router.get(
+  '/gmail/connect',
+  (req, res) => {
+    try {
+      const oauth2Client =
+        createGoogleOAuthClient();
+
+      const state =
+        crypto
+          .randomBytes(32)
+          .toString('hex');
+
+      const authorizationUrl =
+        oauth2Client.generateAuthUrl({
+          access_type: 'offline',
+          prompt: 'consent',
+          scope: [
+            'https://www.googleapis.com/auth/gmail.send'
+          ],
+          state
+        });
+
+      global.gmailOAuthState =
+        state;
+
+      return res.redirect(
+        authorizationUrl
+      );
+
+    } catch (error) {
+      console.error(
+        'Erreur Gmail connect:',
+        error
+      );
+
+      return res.status(500).json({
+        ok: false,
+        error:
+          process.env.NODE_ENV === 'development'
+            ? error.message
+            : 'Configuration Google OAuth indisponible.'
+      });
+    }
+  }
+);
+
+router.get(
+  '/gmail/callback',
+  async (req, res) => {
+    try {
+      const {
+        code,
+        state,
+        error
+      } = req.query;
+
+      if (error) {
+        return res.status(400).send(
+          '<h2>Connexion Gmail annulée</h2>'
+        );
+      }
+
+      if (!code) {
+        return res.status(400).send(
+          '<h2>Code Gmail manquant.</h2>'
+        );
+      }
+
+      if (
+        !state ||
+        state !== global.gmailOAuthState
+      ) {
+        return res.status(400).send(
+          '<h2>État Gmail invalide.</h2>'
+        );
+      }
+
+      const oauth2Client =
+        createGoogleOAuthClient();
+
+      const { tokens } =
+        await oauth2Client.getToken(code);
+
+      oauth2Client.setCredentials(
+        tokens
+      );
+
+      global.gmailOAuthState = null;
+
+      return res.send(`
+        <!DOCTYPE html>
+        <html lang="fr">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport"
+                content="width=device-width,initial-scale=1">
+          <title>SellFlow AI</title>
+        </head>
+
+        <body style="
+          font-family:Arial,sans-serif;
+          background:#f5f7fb;
+          max-width:700px;
+          margin:60px auto;
+          padding:20px;
+        ">
+
+          <div style="
+            background:#fff;
+            border-radius:18px;
+            padding:35px;
+            box-shadow:0 10px 35px rgba(0,0,0,.08);
+          ">
+
+            <h1>✅ Gmail connecté</h1>
+
+            <p>
+              L'autorisation Gmail a été effectuée
+              avec succès.
+            </p>
+
+            <p style="color:#6b7280;">
+              La connexion a été traitée côté serveur.
+              Les informations d'autorisation ne sont
+              pas affichées dans le navigateur.
+            </p>
+
+          </div>
+
+        </body>
+        </html>
+      `);
+
+    } catch (error) {
+      console.error(
+        'Erreur Gmail callback:',
+        error
+      );
+
+      global.gmailOAuthState = null;
+
+      return res.status(500).json({
+        ok: false,
+        message:
+          'Impossible de finaliser la connexion Gmail.'
+      });
+    }
+  }
+);
+
+module.exports = router;
