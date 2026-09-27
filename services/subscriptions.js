@@ -50,6 +50,11 @@ function addDays(date, days) {
   return result;
 }
 
+/**
+ * ============================================================
+ * RÉCUPÉRER L'ABONNEMENT D'UN UTILISATEUR
+ * ============================================================
+ */
 async function getSubscription(userId) {
   const db = database.getPool();
 
@@ -76,6 +81,10 @@ async function getSubscription(userId) {
 
   const user = result.rows[0];
 
+  /*
+   * Si l'abonnement est arrivé à expiration,
+   * on met automatiquement son statut à expired.
+   */
   if (
     user.subscription_expires_at &&
     new Date(user.subscription_expires_at) <= new Date() &&
@@ -110,12 +119,24 @@ async function getSubscription(userId) {
 }
 
 /**
- * Active un abonnement uniquement après
- * confirmation d'un paiement valide.
+ * ============================================================
+ * ACTIVER UN ABONNEMENT
+ * ============================================================
+ *
+ * Cette fonction est appelée après confirmation
+ * d'un paiement valide.
  *
  * billingCycle :
  * - monthly
  * - annual
+ *
+ * paymentReference :
+ * référence du paiement Moneroo
+ *
+ * IMPORTANT :
+ * La fonction est idempotente.
+ * Si le même paiement est traité plusieurs fois,
+ * l'abonnement ne sera pas activé une deuxième fois.
  */
 async function activateSubscription(
   userId,
@@ -137,69 +158,246 @@ async function activateSubscription(
     );
   }
 
-  const duration = getPlanDuration(
-    normalizedPlan,
-    normalizedBillingCycle
-  );
+  /*
+   * On utilise une transaction afin que :
+   *
+   * 1. Le paiement soit vérifié
+   * 2. L'abonnement soit activé
+   * 3. Le paiement soit marqué comme déjà traité
+   *
+   * tout cela de manière cohérente.
+   */
+  const client = await db.connect();
 
-  const now = new Date();
+  try {
+    await client.query('BEGIN');
 
-  const expiresAt = addDays(
-    now,
-    duration
-  );
+    /*
+     * --------------------------------------------------------
+     * PROTECTION CONTRE LES DOUBLES ACTIVATIONS
+     * --------------------------------------------------------
+     */
+    if (paymentReference) {
+      const paymentResult = await client.query(
+        `
+        SELECT
+          id,
+          user_id,
+          provider,
+          provider_reference,
+          plan,
+          billing_cycle,
+          status,
+          metadata
+        FROM payments
+        WHERE provider_reference = $1
+          AND user_id = $2
+        ORDER BY created_at DESC
+        LIMIT 1
+        FOR UPDATE
+        `,
+        [
+          String(paymentReference),
+          userId
+        ]
+      );
 
-  const result = await db.query(
-    `
-    UPDATE users
-    SET
-      plan = $1,
-      subscription_status = 'active',
-      subscription_started_at = $2,
-      subscription_expires_at = $3,
-      reminder_7_sent_at = NULL,
-      reminder_3_sent_at = NULL,
-      reminder_1_sent_at = NULL,
-      expired_notice_sent_at = NULL,
-      updated_at = NOW()
-    WHERE id = $4
-    RETURNING
-      id,
-      email,
-      name,
-      plan,
-      subscription_status,
-      subscription_started_at,
-      subscription_expires_at
-    `,
-    [
-      normalizedPlan,
-      now,
-      expiresAt,
-      userId
-    ]
-  );
+      if (paymentResult.rows.length) {
+        const payment = paymentResult.rows[0];
 
-  if (!result.rows.length) {
-    throw new Error(
-      'Utilisateur introuvable.'
+        const metadata =
+          payment.metadata || {};
+
+        /*
+         * Le même paiement a déjà activé
+         * l'abonnement.
+         */
+        if (
+          metadata.subscription_activated === true
+        ) {
+          const existingUser =
+            await client.query(
+              `
+              SELECT
+                id,
+                email,
+                name,
+                plan,
+                subscription_status,
+                subscription_started_at,
+                subscription_expires_at
+              FROM users
+              WHERE id = $1
+              LIMIT 1
+              `,
+              [userId]
+            );
+
+          if (!existingUser.rows.length) {
+            throw new Error(
+              'Utilisateur introuvable.'
+            );
+          }
+
+          await client.query('COMMIT');
+
+          return {
+            ...existingUser.rows[0],
+            billing_cycle:
+              metadata.billing_cycle ||
+              normalizedBillingCycle,
+            duration_days:
+              metadata.duration_days ||
+              getPlanDuration(
+                normalizedPlan,
+                normalizedBillingCycle
+              ),
+            payment_reference:
+              paymentReference,
+            already_activated: true
+          };
+        }
+      }
+    }
+
+    /*
+     * --------------------------------------------------------
+     * CALCUL DE LA DATE D'EXPIRATION
+     * --------------------------------------------------------
+     */
+    const duration =
+      getPlanDuration(
+        normalizedPlan,
+        normalizedBillingCycle
+      );
+
+    const now = new Date();
+
+    const expiresAt =
+      addDays(now, duration);
+
+    /*
+     * --------------------------------------------------------
+     * ACTIVATION DE L'ABONNEMENT
+     * --------------------------------------------------------
+     */
+    const result = await client.query(
+      `
+      UPDATE users
+      SET
+        plan = $1,
+        subscription_status = 'active',
+        subscription_started_at = $2,
+        subscription_expires_at = $3,
+
+        reminder_7_sent_at = NULL,
+        reminder_3_sent_at = NULL,
+        reminder_1_sent_at = NULL,
+        expired_notice_sent_at = NULL,
+
+        updated_at = NOW()
+
+      WHERE id = $4
+
+      RETURNING
+        id,
+        email,
+        name,
+        plan,
+        subscription_status,
+        subscription_started_at,
+        subscription_expires_at
+      `,
+      [
+        normalizedPlan,
+        now,
+        expiresAt,
+        userId
+      ]
     );
+
+    if (!result.rows.length) {
+      throw new Error(
+        'Utilisateur introuvable.'
+      );
+    }
+
+    /*
+     * --------------------------------------------------------
+     * MARQUER LE PAIEMENT COMME AYANT ACTIVÉ
+     * L'ABONNEMENT
+     * --------------------------------------------------------
+     */
+    if (paymentReference) {
+      await client.query(
+        `
+        UPDATE payments
+        SET
+          metadata =
+            COALESCE(metadata, '{}'::jsonb)
+            ||
+            jsonb_build_object(
+              'subscription_activated',
+              true,
+              'subscription_activated_at',
+              NOW(),
+              'billing_cycle',
+              $1,
+              'duration_days',
+              $2
+            ),
+          updated_at = NOW()
+        WHERE provider_reference = $3
+          AND user_id = $4
+        `,
+        [
+          normalizedBillingCycle,
+          duration,
+          String(paymentReference),
+          userId
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    return {
+      ...result.rows[0],
+
+      billing_cycle:
+        normalizedBillingCycle,
+
+      duration_days:
+        duration,
+
+      payment_reference:
+        paymentReference || null,
+
+      already_activated: false
+    };
+
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error(
+        'Erreur rollback abonnement:',
+        rollbackError
+      );
+    }
+
+    throw error;
+
+  } finally {
+    client.release();
   }
-
-  return {
-    ...result.rows[0],
-
-    billing_cycle:
-      normalizedBillingCycle,
-
-    duration_days:
-      duration,
-
-    payment_reference:
-      paymentReference || null
-  };
 }
 
+/**
+ * ============================================================
+ * VÉRIFICATION DES ABONNEMENTS
+ * ============================================================
+ */
 async function runSubscriptionReminders() {
   const db = database.getPool();
 
@@ -234,27 +432,41 @@ async function runSubscriptionReminders() {
         user.subscription_expires_at
       );
 
+    /*
+     * --------------------------------------------------------
+     * ABONNEMENT EXPIRÉ
+     * --------------------------------------------------------
+     */
     if (expiresAt <= now) {
       await db.query(
         `
         UPDATE users
         SET
           subscription_status = 'expired',
+
           expired_notice_sent_at =
             COALESCE(
               expired_notice_sent_at,
               NOW()
             ),
+
           updated_at = NOW()
+
         WHERE id = $1
         `,
         [user.id]
       );
 
       expired++;
+
       continue;
     }
 
+    /*
+     * --------------------------------------------------------
+     * JOURS RESTANTS
+     * --------------------------------------------------------
+     */
     const difference =
       expiresAt.getTime() -
       now.getTime();
@@ -266,13 +478,10 @@ async function runSubscriptionReminders() {
       );
 
     /*
-     * Les rappels sont actuellement enregistrés
-     * en base.
-     *
-     * L'envoi email sera branché plus tard
-     * avec Resend ou SMTP.
+     * --------------------------------------------------------
+     * RAPPEL J-7
+     * --------------------------------------------------------
      */
-
     if (
       daysRemaining <= 7 &&
       daysRemaining > 3
@@ -286,9 +495,12 @@ async function runSubscriptionReminders() {
               reminder_7_sent_at,
               NOW()
             ),
+
           updated_at = NOW()
+
         WHERE id = $1
           AND reminder_7_sent_at IS NULL
+
         RETURNING id
         `,
         [user.id]
@@ -299,6 +511,11 @@ async function runSubscriptionReminders() {
       }
     }
 
+    /*
+     * --------------------------------------------------------
+     * RAPPEL J-3
+     * --------------------------------------------------------
+     */
     if (
       daysRemaining <= 3 &&
       daysRemaining > 1
@@ -312,9 +529,12 @@ async function runSubscriptionReminders() {
               reminder_3_sent_at,
               NOW()
             ),
+
           updated_at = NOW()
+
         WHERE id = $1
           AND reminder_3_sent_at IS NULL
+
         RETURNING id
         `,
         [user.id]
@@ -325,6 +545,11 @@ async function runSubscriptionReminders() {
       }
     }
 
+    /*
+     * --------------------------------------------------------
+     * RAPPEL J-1
+     * --------------------------------------------------------
+     */
     if (daysRemaining <= 1) {
       const result = await db.query(
         `
@@ -335,9 +560,12 @@ async function runSubscriptionReminders() {
               reminder_1_sent_at,
               NOW()
             ),
+
           updated_at = NOW()
+
         WHERE id = $1
           AND reminder_1_sent_at IS NULL
+
         RETURNING id
         `,
         [user.id]
@@ -356,12 +584,21 @@ async function runSubscriptionReminders() {
   };
 }
 
+/**
+ * ============================================================
+ * WORKER AUTOMATIQUE
+ * ============================================================
+ */
 function startSubscriptionReminderWorker() {
   const interval =
     Number(
       process.env.SUBSCRIPTION_CHECK_INTERVAL_MS
     ) || 21600000;
 
+  /*
+   * Première vérification 5 secondes
+   * après le démarrage du serveur.
+   */
   setTimeout(async () => {
     try {
       const result =
@@ -379,13 +616,18 @@ function startSubscriptionReminderWorker() {
     }
   }, 5000);
 
+  /*
+   * Puis vérification périodique.
+   *
+   * 21600000 ms = 6 heures
+   */
   setInterval(async () => {
     try {
       const result =
         await runSubscriptionReminders();
 
       console.log(
-        'Vérification abonnements:',
+        'Worker abonnements:',
         result
       );
     } catch (error) {
@@ -397,6 +639,11 @@ function startSubscriptionReminderWorker() {
   }, interval);
 }
 
+/**
+ * ============================================================
+ * EXPORTS
+ * ============================================================
+ */
 module.exports = {
   PLAN_DURATIONS,
   normalizePlan,
