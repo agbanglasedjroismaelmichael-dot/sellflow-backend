@@ -1,87 +1,56 @@
 const express = require('express');
-const crypto = require('crypto');
 
 const database = require('../config/database');
+
 const {
   verifyPayment
 } = require('../services/moneroo');
-const {
-  activateSubscription
-} = require('../services/subscriptions');
 
 const router = express.Router();
 
-const MONEROO_WEBHOOK_SECRET =
-  process.env.MONEROO_WEBHOOK_SECRET;
-
-
 /**
  * ============================================================
- * OUTIL DATABASE
+ * SELLFLOW AI — WEBHOOKS MONEROO
+ * ============================================================
+ *
+ * IMPORTANT :
+ * Le webhook ne doit jamais être considéré comme une preuve
+ * suffisante d'un paiement réussi.
+ *
+ * Lorsqu'un événement de succès est reçu, SellFlow vérifie
+ * directement le paiement auprès de Moneroo avant d'activer
+ * l'abonnement.
+ *
  * ============================================================
  */
 
-function getDatabaseClient() {
-  if (database && typeof database.query === 'function') {
-    return database;
-  }
+/**
+ * ============================================================
+ * OUTILS
+ * ============================================================
+ */
 
+/**
+ * Récupérer le pool PostgreSQL.
+ */
+function getDatabasePool() {
   if (
     database &&
-    database.pool &&
-    typeof database.pool.query === 'function'
+    typeof database.getPool === 'function'
   ) {
-    return database.pool;
+    return database.getPool();
   }
 
   throw new Error(
-    'Connexion PostgreSQL introuvable dans config/database.js.'
+    'getPool() est introuvable dans config/database.js.'
   );
 }
 
 
 /**
- * ============================================================
- * VÉRIFICATION SIGNATURE MONEROO
- * ============================================================
+ * Extraire l'identifiant du paiement depuis différents
+ * formats possibles du webhook.
  */
-
-function verifyWebhookSignature(rawBody, signature) {
-  if (!MONEROO_WEBHOOK_SECRET) {
-    throw new Error(
-      'MONEROO_WEBHOOK_SECRET n’est pas configuré.'
-    );
-  }
-
-  if (!signature) {
-    return false;
-  }
-
-  const expectedSignature = crypto
-    .createHmac(
-      'sha256',
-      MONEROO_WEBHOOK_SECRET
-    )
-    .update(rawBody, 'utf8')
-    .digest('hex');
-
-  try {
-    return crypto.timingSafeEqual(
-      Buffer.from(expectedSignature, 'utf8'),
-      Buffer.from(String(signature), 'utf8')
-    );
-  } catch {
-    return false;
-  }
-}
-
-
-/**
- * ============================================================
- * EXTRACTION DES INFORMATIONS
- * ============================================================
- */
-
 function extractPaymentId(payload) {
   return (
     payload?.data?.id ||
@@ -93,6 +62,10 @@ function extractPaymentId(payload) {
   );
 }
 
+
+/**
+ * Extraire le nom de l'événement.
+ */
 function extractEventName(payload) {
   return (
     payload?.event ||
@@ -105,158 +78,157 @@ function extractEventName(payload) {
 
 
 /**
- * ============================================================
- * DÉTERMINER SI LE PAIEMENT EST RÉUSSI
- * ============================================================
+ * Extraire le statut du paiement du webhook.
  */
-
-function isSuccessfulEvent(eventName, payload) {
-  const event = String(eventName || '').toLowerCase();
-
-  if (
-    event === 'payment.success' ||
-    event === 'payment_success' ||
-    event === 'payment.succeeded' ||
-    event === 'payment_succeeded'
-  ) {
-    return true;
-  }
-
-  const status =
+function extractWebhookStatus(payload) {
+  return (
     payload?.data?.status ||
     payload?.data?.payment_status ||
+    payload?.data?.payment?.status ||
     payload?.status ||
     payload?.payment_status ||
-    payload?.data?.payment?.status ||
-    null;
+    payload?.payment?.status ||
+    null
+  );
+}
+
+
+/**
+ * Normaliser un statut.
+ */
+function normalizeStatus(status) {
+  if (
+    typeof status !== 'string'
+  ) {
+    return null;
+  }
+
+  return status
+    .trim()
+    .toLowerCase();
+}
+
+
+/**
+ * Vérifier si un statut représente un paiement réussi.
+ */
+function isSuccessfulStatus(status) {
+  return [
+    'success',
+    'successful',
+    'succeeded',
+    'paid',
+    'completed'
+  ].includes(
+    normalizeStatus(status)
+  );
+}
+
+
+/**
+ * Vérifier si un statut représente un paiement échoué.
+ */
+function isFailedStatus(status) {
+  return [
+    'failed',
+    'failure',
+    'cancelled',
+    'canceled',
+    'expired'
+  ].includes(
+    normalizeStatus(status)
+  );
+}
+
+
+/**
+ * Vérifier si l'événement représente un succès.
+ */
+function isSuccessfulEvent(
+  eventName,
+  payload
+) {
+  const event =
+    String(eventName || '')
+      .trim()
+      .toLowerCase();
 
   if (
-    typeof status === 'string' &&
     [
-      'success',
-      'successful',
-      'succeeded',
-      'paid',
-      'completed'
-    ].includes(status.toLowerCase())
+      'payment.success',
+      'payment_success',
+      'payment.succeeded',
+      'payment_succeeded',
+      'payment.paid',
+      'payment_paid'
+    ].includes(event)
   ) {
     return true;
   }
 
-  return false;
+  return isSuccessfulStatus(
+    extractWebhookStatus(payload)
+  );
+}
+
+
+/**
+ * Vérifier si l'événement représente un échec.
+ */
+function isFailedEvent(
+  eventName,
+  payload
+) {
+  const event =
+    String(eventName || '')
+      .trim()
+      .toLowerCase();
+
+  if (
+    [
+      'payment.failed',
+      'payment_failed',
+      'payment.cancelled',
+      'payment_cancelled',
+      'payment.canceled',
+      'payment_expired'
+    ].includes(event)
+  ) {
+    return true;
+  }
+
+  return isFailedStatus(
+    extractWebhookStatus(payload)
+  );
 }
 
 
 /**
  * ============================================================
- * DÉTERMINER SI LE PAIEMENT A ÉCHOUÉ
- * ============================================================
- */
-
-function isFailedEvent(eventName, payload) {
-  const event = String(eventName || '').toLowerCase();
-
-  if (
-    event === 'payment.failed' ||
-    event === 'payment_failed' ||
-    event === 'payment.cancelled' ||
-    event === 'payment_cancelled'
-  ) {
-    return true;
-  }
-
-  const status =
-    payload?.data?.status ||
-    payload?.data?.payment_status ||
-    payload?.status ||
-    payload?.payment_status ||
-    payload?.data?.payment?.status ||
-    null;
-
-  if (
-    typeof status === 'string' &&
-    [
-      'failed',
-      'failure',
-      'cancelled',
-      'canceled',
-      'expired'
-    ].includes(status.toLowerCase())
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
-
-/**
- * ============================================================
- * WEBHOOK MONEROO
- *
- * IMPORTANT :
- * express.json() ne doit pas être utilisé avant cette route
- * si nous voulons vérifier la signature sur le corps brut.
+ * ROUTE WEBHOOK
  * ============================================================
  */
 
 router.post(
   '/moneroo',
-  express.raw({ type: 'application/json' }),
+  express.json({
+    limit: '1mb'
+  }),
   async (req, res) => {
     try {
-      const rawBody = Buffer.isBuffer(req.body)
-        ? req.body.toString('utf8')
-        : String(req.body || '');
-
-      const signature =
-        req.headers['x-moneroo-signature'];
 
       /**
        * --------------------------------------------------------
-       * 1. Vérifier la signature
+       * 1. Récupérer le payload
        * --------------------------------------------------------
        */
 
-      const validSignature =
-        verifyWebhookSignature(
-          rawBody,
-          signature
-        );
-
-      if (!validSignature) {
-        console.warn(
-          '⚠️ Signature webhook Moneroo invalide.'
-        );
-
-        return res.status(401).json({
-          ok: false,
-          error: 'INVALID_WEBHOOK_SIGNATURE'
-        });
-      }
-
+      const payload =
+        req.body || {};
 
       /**
        * --------------------------------------------------------
-       * 2. Parser le JSON
-       * --------------------------------------------------------
-       */
-
-      let payload;
-
-      try {
-        payload = JSON.parse(rawBody);
-      } catch {
-        return res.status(400).json({
-          ok: false,
-          error: 'INVALID_JSON'
-        });
-      }
-
-
-      /**
-       * --------------------------------------------------------
-       * 3. Identifier l'événement
+       * 2. Identifier l'événement
        * --------------------------------------------------------
        */
 
@@ -268,9 +240,17 @@ router.post(
 
       console.log(
         '📩 Webhook Moneroo reçu:',
-        eventName,
-        paymentId
+        {
+          event: eventName,
+          paymentId
+        }
       );
+
+      /**
+       * --------------------------------------------------------
+       * 3. Vérifier paymentId
+       * --------------------------------------------------------
+       */
 
       if (!paymentId) {
         console.warn(
@@ -283,37 +263,55 @@ router.post(
         });
       }
 
-
       /**
        * --------------------------------------------------------
-       * 4. Trouver le paiement dans SellFlow
+       * 4. Connexion PostgreSQL
        * --------------------------------------------------------
        */
 
-      const db = getDatabaseClient();
+      const db =
+        getDatabasePool();
 
-      const paymentResult = await db.query(
-        `
-        SELECT
-          id,
-          user_id,
-          provider,
-          provider_reference,
-          plan,
-          billing_cycle,
-          amount,
-          currency,
-          status,
-          metadata
-        FROM payments
-        WHERE provider = 'moneroo'
-          AND provider_reference = $1
-        LIMIT 1
-        `,
-        [paymentId]
-      );
+      /**
+       * --------------------------------------------------------
+       * 5. Rechercher le paiement
+       * --------------------------------------------------------
+       */
 
-      if (paymentResult.rows.length === 0) {
+      const paymentResult =
+        await db.query(
+          `
+          SELECT
+            id,
+            user_id,
+            provider,
+            provider_reference,
+            plan,
+            billing_cycle,
+            amount,
+            currency,
+            status,
+            checkout_url,
+            paid_at,
+            failure_reason,
+            metadata
+          FROM payments
+          WHERE provider = 'moneroo'
+            AND provider_reference = $1
+          LIMIT 1
+          `,
+          [paymentId]
+        );
+
+      /**
+       * --------------------------------------------------------
+       * Paiement inconnu
+       * --------------------------------------------------------
+       */
+
+      if (
+        paymentResult.rows.length === 0
+      ) {
         console.warn(
           '⚠️ Paiement Moneroo inconnu:',
           paymentId
@@ -328,10 +326,9 @@ router.post(
       const payment =
         paymentResult.rows[0];
 
-
       /**
        * --------------------------------------------------------
-       * 5. Paiement réussi
+       * 6. Événement de succès
        * --------------------------------------------------------
        */
 
@@ -343,37 +340,14 @@ router.post(
       ) {
 
         /**
-         * Vérification supplémentaire directement
-         * auprès de Moneroo.
-         */
-        let verifiedPayment;
-
-        try {
-          verifiedPayment =
-            await verifyPayment(paymentId);
-        } catch (verificationError) {
-          console.error(
-            '❌ Vérification Moneroo impossible:',
-            verificationError.message
-          );
-
-          return res.status(500).json({
-            ok: false,
-            error: 'MONEROO_VERIFICATION_FAILED'
-          });
-        }
-
-
-        /**
          * ------------------------------------------------------
-         * Idempotence
-         *
-         * Si le webhook est reçu plusieurs fois, on ne doit
-         * jamais prolonger l'abonnement plusieurs fois.
+         * Protection contre les doublons
          * ------------------------------------------------------
          */
 
-        if (payment.status === 'paid') {
+        if (
+          payment.status === 'paid'
+        ) {
           console.log(
             'ℹ️ Paiement déjà traité:',
             paymentId
@@ -385,70 +359,184 @@ router.post(
           });
         }
 
+        /**
+         * ------------------------------------------------------
+         * Vérification DIRECTE auprès de Moneroo
+         * ------------------------------------------------------
+         */
+
+        let verifiedPayment;
+
+        try {
+
+          verifiedPayment =
+            await verifyPayment(
+              paymentId
+            );
+
+        } catch (verificationError) {
+
+          console.error(
+            '❌ Vérification Moneroo impossible:',
+            verificationError
+          );
+
+          return res.status(502).json({
+            ok: false,
+            error:
+              'MONEROO_VERIFICATION_FAILED'
+          });
+        }
 
         /**
          * ------------------------------------------------------
-         * Vérification du statut final.
+         * Récupérer le statut réel
          * ------------------------------------------------------
          */
 
         const verifiedStatus =
           verifiedPayment?.data?.status ||
           verifiedPayment?.data?.payment_status ||
+          verifiedPayment?.data?.payment?.status ||
           verifiedPayment?.status ||
           verifiedPayment?.payment_status ||
+          verifiedPayment?.payment?.status ||
           null;
 
+        console.log(
+          '🔎 Statut Moneroo vérifié:',
+          verifiedStatus
+        );
+
+        /**
+         * ------------------------------------------------------
+         * Le paiement doit être réellement confirmé
+         * ------------------------------------------------------
+         */
+
         if (
-          typeof verifiedStatus === 'string' &&
-          ![
-            'success',
-            'successful',
-            'succeeded',
-            'paid',
-            'completed'
-          ].includes(
-            verifiedStatus.toLowerCase()
+          !isSuccessfulStatus(
+            verifiedStatus
           )
         ) {
+
           console.warn(
-            '⚠️ Le webhook indique un succès mais la vérification Moneroo ne confirme pas le paiement:',
-            verifiedStatus
+            '⚠️ Paiement non confirmé par Moneroo:',
+            {
+              paymentId,
+              verifiedStatus
+            }
           );
 
           return res.status(409).json({
             ok: false,
-            error: 'PAYMENT_NOT_CONFIRMED'
+            error:
+              'PAYMENT_NOT_CONFIRMED'
           });
         }
 
-
         /**
          * ------------------------------------------------------
-         * Marquer le paiement comme payé.
+         * 7. Marquer le paiement comme payé
          * ------------------------------------------------------
          */
 
-        await db.query(
-          `
-          UPDATE payments
-          SET
-            status = 'paid',
-            paid_at = NOW(),
-            updated_at = NOW()
-          WHERE id = $1
-          `,
-          [payment.id]
-        );
-
+        const updateResult =
+          await db.query(
+            `
+            UPDATE payments
+            SET
+              status = 'paid',
+              paid_at = COALESCE(
+                paid_at,
+                NOW()
+              ),
+              updated_at = NOW()
+            WHERE id = $1
+              AND status <> 'paid'
+            RETURNING id
+            `,
+            [payment.id]
+          );
 
         /**
          * ------------------------------------------------------
-         * Activer l'abonnement.
-         *
-         * IMPORTANT :
-         * Cette fonction utilise plan + billing_cycle
-         * provenant de la base de données.
+         * Si quelqu'un a déjà traité le paiement entre-temps
+         * ------------------------------------------------------
+         */
+
+        if (
+          updateResult.rows.length === 0
+        ) {
+
+          console.log(
+            'ℹ️ Paiement déjà traité simultanément:',
+            paymentId
+          );
+
+          return res.json({
+            ok: true,
+            already_processed: true
+          });
+        }
+
+        /**
+         * ------------------------------------------------------
+         * 8. Activer l'abonnement
+         * ------------------------------------------------------
+         */
+
+        let activateSubscription;
+
+        try {
+
+          const subscriptionService =
+            require('../services/subscriptions');
+
+          activateSubscription =
+            subscriptionService
+              .activateSubscription;
+
+        } catch (subscriptionError) {
+
+          console.error(
+            '❌ Service abonnement introuvable:',
+            subscriptionError
+          );
+
+          /**
+           * Le paiement est déjà marqué payé.
+           *
+           * On retourne une erreur pour que le problème
+           * soit visible dans les logs et puisse être corrigé.
+           */
+
+          return res.status(500).json({
+            ok: false,
+            error:
+              'SUBSCRIPTION_SERVICE_UNAVAILABLE'
+          });
+        }
+
+        if (
+          typeof activateSubscription !==
+          'function'
+        ) {
+
+          console.error(
+            '❌ activateSubscription() introuvable.'
+          );
+
+          return res.status(500).json({
+            ok: false,
+            error:
+              'SUBSCRIPTION_ACTIVATION_UNAVAILABLE'
+          });
+        }
+
+        /**
+         * ------------------------------------------------------
+         * Activation avec les données de la DB
          * ------------------------------------------------------
          */
 
@@ -459,7 +547,6 @@ router.post(
           payment.billing_cycle
         );
 
-
         console.log(
           '✅ Paiement confirmé + abonnement activé:',
           paymentId
@@ -467,14 +554,15 @@ router.post(
 
         return res.json({
           ok: true,
-          processed: true
+          processed: true,
+          payment_id: paymentId,
+          status: 'paid'
         });
       }
 
-
       /**
        * --------------------------------------------------------
-       * 6. Paiement échoué / annulé
+       * 9. Paiement échoué / annulé
        * --------------------------------------------------------
        */
 
@@ -486,14 +574,28 @@ router.post(
       ) {
 
         /**
-         * Ne pas écraser un paiement déjà payé.
+         * Ne jamais remplacer "paid" par "failed".
          */
-        if (payment.status === 'paid') {
+
+        if (
+          payment.status === 'paid'
+        ) {
+
+          console.log(
+            'ℹ️ Paiement déjà payé, événement d’échec ignoré:',
+            paymentId
+          );
+
           return res.json({
             ok: true,
             already_paid: true
           });
         }
+
+        const failureReason =
+          eventName ||
+          extractWebhookStatus(payload) ||
+          'Payment failed';
 
         await db.query(
           `
@@ -506,7 +608,7 @@ router.post(
           `,
           [
             payment.id,
-            eventName || 'Payment failed'
+            String(failureReason)
           ]
         );
 
@@ -517,29 +619,32 @@ router.post(
 
         return res.json({
           ok: true,
-          processed: true
+          processed: true,
+          payment_id: paymentId,
+          status: 'failed'
         });
       }
 
-
       /**
        * --------------------------------------------------------
-       * 7. Événement non traité
+       * 10. Événement non traité
        * --------------------------------------------------------
        */
 
       console.log(
-        'ℹ️ Événement Moneroo reçu mais non traité:',
+        'ℹ️ Événement Moneroo ignoré:',
         eventName
       );
 
       return res.json({
         ok: true,
         ignored: true,
-        event: eventName
+        event: eventName || null,
+        payment_id: paymentId
       });
 
     } catch (error) {
+
       console.error(
         '❌ Erreur webhook Moneroo:',
         error
@@ -547,11 +652,11 @@ router.post(
 
       return res.status(500).json({
         ok: false,
-        error: 'WEBHOOK_PROCESSING_FAILED'
+        error:
+          'WEBHOOK_PROCESSING_FAILED'
       });
     }
   }
 );
-
 
 module.exports = router;
