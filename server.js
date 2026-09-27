@@ -2,26 +2,15 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
-const Resend = require('resend').Resend;
+const { Resend } = require('resend');
 
 const database = require('./config/database');
 const databaseInit = require('./database/init');
 
 const authRoutes = require('./routes/auth');
 const chariowRoutes = require('./routes/chariow');
-
-/* =========================
-   ROUTES PAIEMENTS
-========================= */
-
 const paymentsRoutes = require('./routes/payments');
-
-/* =========================
-   ROUTES WEBHOOKS
-========================= */
-
 const webhooksRoutes = require('./routes/webhooks');
-
 
 /* =========================
    SUBSCRIPTIONS
@@ -31,7 +20,8 @@ let subscriptionRoutes = null;
 let startSubscriptionReminderWorker = null;
 
 try {
-  subscriptionRoutes = require('./routes/subscriptions');
+  subscriptionRoutes =
+    require('./routes/subscriptions');
 } catch (error) {
   console.log(
     'ℹ️ routes/subscriptions.js non installé pour le moment.'
@@ -56,7 +46,6 @@ try {
   );
 }
 
-
 /* =========================
    APP
 ========================= */
@@ -66,30 +55,67 @@ const app = express();
 const PORT =
   process.env.PORT || 4000;
 
-const API_VERSION = '2.3.0';
-
+const API_VERSION = '2.3.1';
 
 /* =========================
    CORS
 ========================= */
 
+const allowedOrigins = [
+  'https://sellflowme.netlify.app',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
+
 app.use(
   cors({
-    origin: '*'
+    origin: function (origin, callback) {
+      // Autoriser les requêtes sans origin
+      // (Postman, Render health checks, etc.)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      // En développement, autoriser toutes les origines
+      if (process.env.NODE_ENV !== 'production') {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(
+        new Error('Origine CORS non autorisée.')
+      );
+    },
+
+    methods: [
+      'GET',
+      'POST',
+      'PUT',
+      'PATCH',
+      'DELETE',
+      'OPTIONS'
+    ],
+
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With'
+    ],
+
+    credentials: true
   })
 );
 
-
 /*
- * IMPORTANT
+ * IMPORTANT :
  *
- * Le webhook Moneroo doit recevoir le corps
- * brut de la requête pour vérifier sa signature.
- *
- * Donc la route /webhooks/moneroo est montée
- * AVANT express.json().
+ * Le webhook Moneroo est monté AVANT express.json()
+ * afin que la route puisse récupérer le corps brut
+ * si la vérification de signature en a besoin.
  */
-
 
 /* =========================
    WEBHOOKS MONEROO
@@ -99,7 +125,6 @@ app.use(
   '/webhooks',
   webhooksRoutes
 );
-
 
 /* =========================
    JSON
@@ -111,6 +136,16 @@ app.use(
   })
 );
 
+/* =========================
+   URLENCODED
+========================= */
+
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: '1mb'
+  })
+);
 
 /* =========================
    ROOT
@@ -127,7 +162,6 @@ app.get(
       version: API_VERSION,
 
       endpoints: {
-
         health:
           'GET /health',
 
@@ -141,7 +175,6 @@ app.get(
           'GET /test-email',
 
         chariow: {
-
           stores:
             'GET /chariow/stores',
 
@@ -173,7 +206,6 @@ app.get(
             : 'non installé',
 
         payments: {
-
           offers:
             'GET /payments/offers',
 
@@ -185,7 +217,6 @@ app.get(
         },
 
         webhooks: {
-
           moneroo:
             'POST /webhooks/moneroo'
         }
@@ -194,7 +225,6 @@ app.get(
   }
 );
 
-
 /* =========================
    HEALTH
 ========================= */
@@ -202,14 +232,11 @@ app.get(
 app.get(
   '/health',
   async function (req, res) {
-
     try {
-
       const result =
         await database.testDatabaseConnection();
 
-      res.json({
-
+      return res.json({
         ok: true,
 
         service:
@@ -228,14 +255,12 @@ app.get(
       });
 
     } catch (error) {
-
       console.error(
-        'Erreur PostgreSQL:',
+        '❌ Erreur PostgreSQL:',
         error
       );
 
-      res.status(500).json({
-
+      return res.status(500).json({
         ok: false,
 
         service:
@@ -254,7 +279,6 @@ app.get(
   }
 );
 
-
 /* =========================
    AUTH ROUTES
 ========================= */
@@ -263,7 +287,6 @@ app.use(
   '/auth',
   authRoutes
 );
-
 
 /* =========================
    CHARIOW MULTI-BOUTIQUES
@@ -274,20 +297,16 @@ app.use(
   chariowRoutes
 );
 
-
 /* =========================
    SUBSCRIPTIONS
 ========================= */
 
 if (subscriptionRoutes) {
-
   app.use(
     '/subscriptions',
     subscriptionRoutes
   );
-
 }
-
 
 /* =========================
    PAYMENTS
@@ -298,7 +317,6 @@ app.use(
   paymentsRoutes
 );
 
-
 /* =========================
    TEST AUTH / DATABASE
 ========================= */
@@ -306,9 +324,7 @@ app.use(
 app.get(
   '/test-auth',
   async function (req, res) {
-
     try {
-
       const db =
         database.getPool();
 
@@ -316,19 +332,14 @@ app.get(
         'SELECT 1'
       );
 
-
       const tableCheck =
-        await db.query(
-          `
+        await db.query(`
           SELECT to_regclass(
             'public.registration_requests'
           ) AS table_name
-          `
-        );
+        `);
 
-
-      res.json({
-
+      return res.json({
         ok: true,
 
         authRoutes:
@@ -365,14 +376,12 @@ app.get(
       });
 
     } catch (error) {
-
       console.error(
-        'Erreur test-auth:',
+        '❌ Erreur test-auth:',
         error
       );
 
-      res.status(500).json({
-
+      return res.status(500).json({
         ok: false,
 
         error:
@@ -382,7 +391,6 @@ app.get(
   }
 );
 
-
 /* =========================
    TEST RESEND
 ========================= */
@@ -390,15 +398,9 @@ app.get(
 app.get(
   '/test-email',
   async function (req, res) {
-
     try {
-
-      if (
-        !process.env.RESEND_API_KEY
-      ) {
-
+      if (!process.env.RESEND_API_KEY) {
         return res.status(500).json({
-
           ok: false,
 
           error:
@@ -406,13 +408,8 @@ app.get(
         });
       }
 
-
-      if (
-        !process.env.EMAIL_FROM
-      ) {
-
+      if (!process.env.EMAIL_FROM) {
         return res.status(500).json({
-
           ok: false,
 
           error:
@@ -420,13 +417,8 @@ app.get(
         });
       }
 
-
-      if (
-        !process.env.EMAIL_USER
-      ) {
-
+      if (!process.env.EMAIL_USER) {
         return res.status(500).json({
-
           ok: false,
 
           error:
@@ -434,16 +426,13 @@ app.get(
         });
       }
 
-
       const resend =
         new Resend(
           process.env.RESEND_API_KEY
         );
 
-
       const result =
         await resend.emails.send({
-
           from:
             process.env.EMAIL_FROM,
 
@@ -458,11 +447,8 @@ app.get(
             'Félicitations ! SellFlow AI peut maintenant envoyer des emails.'
         });
 
-
       if (result.error) {
-
         return res.status(500).json({
-
           ok: false,
 
           error:
@@ -474,9 +460,7 @@ app.get(
         });
       }
 
-
-      res.json({
-
+      return res.json({
         ok: true,
 
         message:
@@ -490,27 +474,23 @@ app.get(
       });
 
     } catch (error) {
-
       console.error(
-        'Erreur Resend:',
+        '❌ Erreur Resend:',
         error
       );
 
-      res.status(500).json({
-
+      return res.status(500).json({
         ok: false,
 
         error:
           'Impossible d’envoyer l’email.',
 
         details:
-          error.message ||
-          null
+          error.message || null
       });
     }
   }
 );
-
 
 /* =========================
    404
@@ -518,17 +498,17 @@ app.get(
 
 app.use(
   function (req, res) {
-
-    res.status(404).json({
-
+    return res.status(404).json({
       ok: false,
 
       error:
-        'Route introuvable'
+        'ROUTE_NOT_FOUND',
+
+      message:
+        'Route introuvable.'
     });
   }
 );
-
 
 /* =========================
    ERROR HANDLER
@@ -541,111 +521,114 @@ app.use(
     res,
     next
   ) {
-
     console.error(
-      'Erreur serveur:',
+      '❌ Erreur serveur:',
       err
     );
 
-    res.status(500).json({
+    if (res.headersSent) {
+      return next(err);
+    }
 
+    return res.status(
+      err.status || 500
+    ).json({
       ok: false,
 
       error:
-        'Erreur serveur',
+        'SERVER_ERROR',
 
-      details:
+      message:
         err.message ||
-        null
+        'Erreur serveur.'
     });
   }
 );
-
 
 /* =========================
    START SERVER
 ========================= */
 
 async function startServer() {
-
   try {
-
     console.log(
-      'Connexion à PostgreSQL...'
+      '======================================'
     );
 
+    console.log(
+      '🚀 Démarrage de SellFlow AI...'
+    );
+
+    console.log(
+      '======================================'
+    );
+
+    console.log(
+      '🔌 Connexion à PostgreSQL...'
+    );
 
     await database.testDatabaseConnection();
 
-
     console.log(
-      'PostgreSQL connecté.'
+      '✅ PostgreSQL connecté.'
     );
 
-
     console.log(
-      'Initialisation de la base de données...'
+      '🗄️ Initialisation de la base de données...'
     );
-
 
     await databaseInit.initDatabase();
 
-
     console.log(
-      'Base de données prête.'
+      '✅ Base de données prête.'
     );
-
 
     app.listen(
       PORT,
+      '0.0.0.0',
       function () {
-
         console.log(
-          'SellFlow API démarrée sur le port ' +
-          PORT
+          '======================================'
         );
 
-
         console.log(
-          'Port: ' +
-          PORT
+          '✅ SellFlow API démarrée'
         );
 
+        console.log(
+          '🌐 Port: ' + PORT
+        );
 
         console.log(
-          'Version API: ' +
+          '📦 Version API: ' +
           API_VERSION
         );
 
-
         console.log(
-          'Chariow multi-boutiques: ACTIVÉ'
+          '💳 Paiements Moneroo: ACTIVÉS'
         );
 
-
         console.log(
-          'Paiements Moneroo: ACTIVÉS'
+          '🔔 Webhook Moneroo: ACTIVÉ'
         );
 
-
         console.log(
-          'Webhook Moneroo: ACTIVÉ'
+          '🛍️ Chariow multi-boutiques: ACTIVÉ'
         );
-
 
         if (subscriptionRoutes) {
-
           console.log(
-            'Abonnements: ACTIVÉS'
+            '📅 Abonnements: ACTIVÉS'
           );
-
         } else {
-
           console.log(
-            'Abonnements: en attente d’installation'
+            '📅 Abonnements: en attente'
           );
         }
 
+        console.log(
+          '======================================'
+        );
 
         /*
          * Worker des rappels d'abonnement.
@@ -655,19 +638,16 @@ async function startServer() {
           typeof startSubscriptionReminderWorker ===
           'function'
         ) {
-
           try {
-
             startSubscriptionReminderWorker();
 
             console.log(
-              'Worker des abonnements démarré.'
+              '⏰ Worker des abonnements démarré.'
             );
 
           } catch (workerError) {
-
             console.error(
-              'Erreur démarrage worker abonnement:',
+              '❌ Erreur démarrage worker abonnement:',
               workerError
             );
           }
@@ -676,15 +656,24 @@ async function startServer() {
     );
 
   } catch (error) {
+    console.error(
+      '======================================'
+    );
 
     console.error(
-      'Impossible de démarrer SellFlow:',
+      '❌ IMPOSSIBLE DE DÉMARRER SELLFLOW'
+    );
+
+    console.error(
       error
+    );
+
+    console.error(
+      '======================================'
     );
 
     process.exit(1);
   }
 }
-
 
 startServer();
