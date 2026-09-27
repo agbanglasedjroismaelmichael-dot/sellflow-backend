@@ -6,6 +6,7 @@ const Resend = require('resend').Resend;
 
 const database = require('./config/database');
 const databaseInit = require('./database/init');
+const authRoutes = require('./routes/auth');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -33,6 +34,7 @@ app.get('/', function (req, res) {
     version: '2.1.0',
     endpoints: {
       health: 'GET /health',
+      auth: '/auth',
       testAuth: 'GET /test-auth',
       testEmail: 'GET /test-email'
     }
@@ -68,6 +70,12 @@ app.get('/health', async function (req, res) {
 });
 
 /* =========================
+   AUTH ROUTES
+========================= */
+
+app.use('/auth', authRoutes);
+
+/* =========================
    TEST AUTH / DATABASE
 ========================= */
 
@@ -83,7 +91,7 @@ app.get('/test-auth', async function (req, res) {
 
     res.json({
       ok: true,
-      authRoutes: 'temporarily-disabled',
+      authRoutes: 'enabled',
       database: 'connected',
       registrationRequestsTable:
         tableCheck.rows[0].table_name
