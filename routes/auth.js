@@ -57,14 +57,24 @@ function getEmailFrom() {
   return process.env.EMAIL_FROM;
 }
 
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 async function sendVerificationEmail({
   email,
   name,
   code
 }) {
   const resend = getResend();
-
   const from = getEmailFrom();
+
+  const safeName = escapeHtml(name);
 
   const result = await resend.emails.send({
     from,
@@ -100,7 +110,7 @@ async function sendVerificationEmail({
           </h1>
 
           <p>
-            Bonjour ${String(name || '').replace(/</g, '&lt;')},
+            Bonjour ${safeName},
           </p>
 
           <p>
@@ -117,11 +127,12 @@ async function sendVerificationEmail({
             font-weight:bold;
             letter-spacing:8px;
           ">
-            ${code}
+            ${escapeHtml(code)}
           </div>
 
           <p>
-            Ce code est valable pendant <strong>10 minutes</strong>.
+            Ce code est valable pendant
+            <strong>10 minutes</strong>.
           </p>
 
           <p style="color:#6b7280;font-size:13px;">
@@ -138,7 +149,8 @@ async function sendVerificationEmail({
 
   if (result?.error) {
     throw new Error(
-      result.error.message || 'Impossible d’envoyer l’e-mail.'
+      result.error.message ||
+      'Impossible d’envoyer l’e-mail.'
     );
   }
 
@@ -161,17 +173,26 @@ router.post(
         phone,
         phone_international,
         country,
-        dial_code,
-        resend
+        dial_code
       } = req.body || {};
 
-      const normalizedEmail = normalizeEmail(email);
+      const normalizedEmail =
+        normalizeEmail(email);
 
       const finalPhone =
-        phone_international ||
-        ((dial_code || '') + (phone || ''));
+        String(
+          phone_international ||
+          `${dial_code || ''}${phone || ''}`
+        ).trim();
 
-      if (!name || !normalizedEmail || !finalPhone) {
+      const cleanName =
+        String(name || '').trim();
+
+      if (
+        !cleanName ||
+        !normalizedEmail ||
+        !finalPhone
+      ) {
         return res.status(400).json({
           ok: false,
           message:
@@ -179,24 +200,28 @@ router.post(
         });
       }
 
-      if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+      if (
+        !/^\S+@\S+\.\S+$/.test(normalizedEmail)
+      ) {
         return res.status(400).json({
           ok: false,
-          message: 'Adresse e-mail invalide.'
+          message:
+            'Adresse e-mail invalide.'
         });
       }
 
       /* Vérifie si le compte existe déjà */
 
-      const existingUser = await db.query(
-        `
-        SELECT id, email_verified
-        FROM users
-        WHERE email = $1
-        LIMIT 1
-        `,
-        [normalizedEmail]
-      );
+      const existingUser =
+        await db.query(
+          `
+          SELECT id
+          FROM users
+          WHERE email = $1
+          LIMIT 1
+          `,
+          [normalizedEmail]
+        );
 
       if (existingUser.rows.length > 0) {
         return res.status(409).json({
@@ -208,40 +233,43 @@ router.post(
 
       /* Empêche les demandes trop rapprochées */
 
-      if (!resend) {
-        const recent = await db.query(
+      const recent =
+        await db.query(
           `
           SELECT id
           FROM registration_requests
           WHERE email = $1
-            AND created_at > NOW() - INTERVAL '60 seconds'
+            AND created_at >
+              NOW() - INTERVAL '60 seconds'
           ORDER BY created_at DESC
           LIMIT 1
           `,
           [normalizedEmail]
         );
 
-        if (recent.rows.length > 0) {
-          return res.status(429).json({
-            ok: false,
-            message:
-              'Attends environ 1 minute avant de demander un nouveau code.'
-          });
-        }
+      if (recent.rows.length > 0) {
+        return res.status(429).json({
+          ok: false,
+          message:
+            'Attends environ 1 minute avant de demander un nouveau code.'
+        });
       }
 
       /*
-        En mode test, le code est fixé à 000000.
-        En mode normal, un vrai code aléatoire est généré.
+        MODE TEST :
+        code fixe 000000.
       */
 
-      const code = isDevAuthBypassEnabled()
-        ? '000000'
-        : generateVerificationCode();
+      const code =
+        isDevAuthBypassEnabled()
+          ? '000000'
+          : generateVerificationCode();
 
-      const codeHash = await hashPassword(code);
+      const codeHash =
+        await hashPassword(code);
 
-      const verificationId = newId();
+      const verificationId =
+        newId();
 
       await db.query(
         `
@@ -272,7 +300,7 @@ router.post(
         `,
         [
           verificationId,
-          String(name).trim(),
+          cleanName,
           normalizedEmail,
           finalPhone,
           country || '',
@@ -280,10 +308,7 @@ router.post(
         ]
       );
 
-      /*
-        MODE TEST :
-        On ne contacte pas Resend.
-      */
+      /* MODE TEST */
 
       if (isDevAuthBypassEnabled()) {
         console.log(
@@ -292,28 +317,29 @@ router.post(
 
         return res.json({
           ok: true,
-          message: 'Mode test : utilise le code 000000.',
-          verification_token: verificationId,
+          message:
+            'Mode test : utilise le code 000000.',
+          verification_token:
+            verificationId,
           dev_mode: true,
           test_code: '000000'
         });
       }
 
-      /*
-        MODE NORMAL :
-        Envoi réel par Resend.
-      */
+      /* MODE NORMAL */
 
       await sendVerificationEmail({
         email: normalizedEmail,
-        name: String(name).trim(),
+        name: cleanName,
         code
       });
 
       return res.json({
         ok: true,
-        message: 'Code de vérification envoyé.',
-        verification_token: verificationId
+        message:
+          'Code de vérification envoyé.',
+        verification_token:
+          verificationId
       });
 
     } catch (error) {
@@ -348,43 +374,53 @@ router.post(
         verification_token
       } = req.body || {};
 
-      const normalizedEmail = normalizeEmail(email);
+      const normalizedEmail =
+        normalizeEmail(email);
 
-      if (!normalizedEmail || !code) {
+      const cleanCode =
+        String(code || '').trim();
+
+      if (
+        !normalizedEmail ||
+        !cleanCode
+      ) {
         return res.status(400).json({
           ok: false,
-          message: 'E-mail et code sont obligatoires.'
+          message:
+            'E-mail et code sont obligatoires.'
         });
       }
 
       let requestResult;
 
       if (verification_token) {
-        requestResult = await db.query(
-          `
-          SELECT *
-          FROM registration_requests
-          WHERE id = $1
-            AND email = $2
-          LIMIT 1
-          `,
-          [
-            verification_token,
-            normalizedEmail
-          ]
-        );
+        requestResult =
+          await db.query(
+            `
+            SELECT *
+            FROM registration_requests
+            WHERE id = $1
+              AND email = $2
+            LIMIT 1
+            `,
+            [
+              verification_token,
+              normalizedEmail
+            ]
+          );
       } else {
-        requestResult = await db.query(
-          `
-          SELECT *
-          FROM registration_requests
-          WHERE email = $1
-            AND verified = FALSE
-          ORDER BY created_at DESC
-          LIMIT 1
-          `,
-          [normalizedEmail]
-        );
+        requestResult =
+          await db.query(
+            `
+            SELECT *
+            FROM registration_requests
+            WHERE email = $1
+              AND verified = FALSE
+            ORDER BY created_at DESC
+            LIMIT 1
+            `,
+            [normalizedEmail]
+          );
       }
 
       if (requestResult.rows.length === 0) {
@@ -395,18 +431,24 @@ router.post(
         });
       }
 
-      const request = requestResult.rows[0];
+      const request =
+        requestResult.rows[0];
 
       if (request.verified) {
         return res.json({
           ok: true,
           verified: true,
-          verification_token: request.id,
-          verificationId: request.id
+          verification_token:
+            request.id,
+          verificationId:
+            request.id
         });
       }
 
-      if (new Date(request.expires_at) < new Date()) {
+      if (
+        new Date(request.expires_at) <
+        new Date()
+      ) {
         return res.status(400).json({
           ok: false,
           message:
@@ -414,7 +456,9 @@ router.post(
         });
       }
 
-      if (request.attempts >= 5) {
+      if (
+        Number(request.attempts || 0) >= 5
+      ) {
         return res.status(429).json({
           ok: false,
           message:
@@ -422,24 +466,19 @@ router.post(
         });
       }
 
-      /*
-        MODE TEST :
-        Le code 000000 est accepté uniquement
-        lorsque DEV_AUTH_BYPASS=true.
-      */
-
       let validCode = false;
 
       if (
         isDevAuthBypassEnabled() &&
-        String(code).trim() === '000000'
+        cleanCode === '000000'
       ) {
         validCode = true;
       } else {
-        validCode = await verifyPassword(
-          String(code),
-          request.code_hash
-        );
+        validCode =
+          await verifyPassword(
+            cleanCode,
+            request.code_hash
+          );
       }
 
       if (!validCode) {
@@ -472,11 +511,14 @@ router.post(
       return res.json({
         ok: true,
         verified: true,
-        verification_token: request.id,
-        verificationId: request.id,
-        message: isDevAuthBypassEnabled()
-          ? 'Adresse e-mail vérifiée en mode test.'
-          : 'Adresse e-mail vérifiée.'
+        verification_token:
+          request.id,
+        verificationId:
+          request.id,
+        message:
+          isDevAuthBypassEnabled()
+            ? 'Adresse e-mail vérifiée en mode test.'
+            : 'Adresse e-mail vérifiée.'
       });
 
     } catch (error) {
@@ -515,15 +557,21 @@ router.post(
         verification_token
       } = req.body || {};
 
-      const normalizedEmail = normalizeEmail(email);
+      const normalizedEmail =
+        normalizeEmail(email);
+
+      const cleanName =
+        String(name || '').trim();
 
       const finalPhone =
-        phone_international ||
-        phone ||
-        '';
+        String(
+          phone_international ||
+          phone ||
+          ''
+        ).trim();
 
       if (
-        !name ||
+        !cleanName ||
         !normalizedEmail ||
         !password
       ) {
@@ -534,7 +582,19 @@ router.post(
         });
       }
 
-      if (password.length < 8) {
+      if (
+        !/^\S+@\S+\.\S+$/.test(normalizedEmail)
+      ) {
+        return res.status(400).json({
+          ok: false,
+          message:
+            'Adresse e-mail invalide.'
+        });
+      }
+
+      if (
+        String(password).length < 8
+      ) {
         return res.status(400).json({
           ok: false,
           message:
@@ -561,20 +621,21 @@ router.post(
         });
       }
 
-      const verification = await db.query(
-        `
-        SELECT *
-        FROM registration_requests
-        WHERE id = $1
-          AND email = $2
-          AND verified = TRUE
-        LIMIT 1
-        `,
-        [
-          verification_token,
-          normalizedEmail
-        ]
-      );
+      const verification =
+        await db.query(
+          `
+          SELECT *
+          FROM registration_requests
+          WHERE id = $1
+            AND email = $2
+            AND verified = TRUE
+          LIMIT 1
+          `,
+          [
+            verification_token,
+            normalizedEmail
+          ]
+        );
 
       if (verification.rows.length === 0) {
         return res.status(400).json({
@@ -584,9 +645,13 @@ router.post(
         });
       }
 
-      const request = verification.rows[0];
+      const request =
+        verification.rows[0];
 
-      if (new Date(request.expires_at) < new Date()) {
+      if (
+        new Date(request.expires_at) <
+        new Date()
+      ) {
         return res.status(400).json({
           ok: false,
           message:
@@ -594,15 +659,16 @@ router.post(
         });
       }
 
-      const existingUser = await db.query(
-        `
-        SELECT *
-        FROM users
-        WHERE email = $1
-        LIMIT 1
-        `,
-        [normalizedEmail]
-      );
+      const existingUser =
+        await db.query(
+          `
+          SELECT id
+          FROM users
+          WHERE email = $1
+          LIMIT 1
+          `,
+          [normalizedEmail]
+        );
 
       if (existingUser.rows.length > 0) {
         return res.status(409).json({
@@ -615,51 +681,55 @@ router.post(
       const passwordHash =
         await hashPassword(password);
 
-      const userId = newId();
+      const userId =
+        newId();
 
-      const userResult = await db.query(
-        `
-        INSERT INTO users
-        (
-          id,
-          name,
-          email,
-          phone,
-          country,
-          password_hash,
-          email_verified,
-          plan
-        )
-        VALUES
-        (
-          $1,
-          $2,
-          $3,
-          $4,
-          $5,
-          $6,
-          TRUE,
-          'free'
-        )
-        RETURNING
-          id,
-          name,
-          email,
-          phone,
-          country,
-          email_verified,
-          plan,
-          created_at
-        `,
-        [
-          userId,
-          String(name).trim(),
-          normalizedEmail,
-          finalPhone,
-          country || request.country || '',
-          passwordHash
-        ]
-      );
+      const userResult =
+        await db.query(
+          `
+          INSERT INTO users
+          (
+            id,
+            name,
+            email,
+            phone,
+            country,
+            password_hash,
+            email_verified,
+            plan
+          )
+          VALUES
+          (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            TRUE,
+            'free'
+          )
+          RETURNING
+            id,
+            name,
+            email,
+            phone,
+            country,
+            email_verified,
+            plan,
+            created_at
+          `,
+          [
+            userId,
+            cleanName,
+            normalizedEmail,
+            finalPhone,
+            country ||
+              request.country ||
+              '',
+            passwordHash
+          ]
+        );
 
       await db.query(
         `
@@ -673,7 +743,8 @@ router.post(
       const user =
         userResult.rows[0];
 
-      const token = signToken(user);
+      const token =
+        signToken(user);
 
       return res.status(201).json({
         ok: true,
@@ -721,7 +792,14 @@ router.post(
       const normalizedEmail =
         normalizeEmail(email);
 
-      if (!name || !normalizedEmail || !password) {
+      const cleanName =
+        String(name || '').trim();
+
+      if (
+        !cleanName ||
+        !normalizedEmail ||
+        !password
+      ) {
         return res.status(400).json({
           ok: false,
           message:
@@ -729,7 +807,19 @@ router.post(
         });
       }
 
-      if (password.length < 8) {
+      if (
+        !/^\S+@\S+\.\S+$/.test(normalizedEmail)
+      ) {
+        return res.status(400).json({
+          ok: false,
+          message:
+            'Adresse e-mail invalide.'
+        });
+      }
+
+      if (
+        String(password).length < 8
+      ) {
         return res.status(400).json({
           ok: false,
           message:
@@ -737,15 +827,16 @@ router.post(
         });
       }
 
-      const existing = await db.query(
-        `
-        SELECT id
-        FROM users
-        WHERE email = $1
-        LIMIT 1
-        `,
-        [normalizedEmail]
-      );
+      const existing =
+        await db.query(
+          `
+          SELECT id
+          FROM users
+          WHERE email = $1
+          LIMIT 1
+          `,
+          [normalizedEmail]
+        );
 
       if (existing.rows.length > 0) {
         return res.status(409).json({
@@ -758,49 +849,53 @@ router.post(
       const passwordHash =
         await hashPassword(password);
 
-      const userId = newId();
+      const userId =
+        newId();
 
-      const result = await db.query(
-        `
-        INSERT INTO users
-        (
-          id,
-          name,
-          email,
-          password_hash,
-          email_verified,
-          plan
-        )
-        VALUES
-        (
-          $1,
-          $2,
-          $3,
-          $4,
-          TRUE,
-          'free'
-        )
-        RETURNING
-          id,
-          name,
-          email,
-          phone,
-          country,
-          email_verified,
-          plan,
-          created_at
-        `,
-        [
-          userId,
-          String(name).trim(),
-          normalizedEmail,
-          passwordHash
-        ]
-      );
+      const result =
+        await db.query(
+          `
+          INSERT INTO users
+          (
+            id,
+            name,
+            email,
+            password_hash,
+            email_verified,
+            plan
+          )
+          VALUES
+          (
+            $1,
+            $2,
+            $3,
+            $4,
+            TRUE,
+            'free'
+          )
+          RETURNING
+            id,
+            name,
+            email,
+            phone,
+            country,
+            email_verified,
+            plan,
+            created_at
+          `,
+          [
+            userId,
+            cleanName,
+            normalizedEmail,
+            passwordHash
+          ]
+        );
 
-      const user = result.rows[0];
+      const user =
+        result.rows[0];
 
-      const token = signToken(user);
+      const token =
+        signToken(user);
 
       return res.status(201).json({
         ok: true,
@@ -842,7 +937,10 @@ router.post(
       const normalizedEmail =
         normalizeEmail(email);
 
-      if (!normalizedEmail || !password) {
+      if (
+        !normalizedEmail ||
+        !password
+      ) {
         return res.status(400).json({
           ok: false,
           message:
@@ -850,15 +948,16 @@ router.post(
         });
       }
 
-      const result = await db.query(
-        `
-        SELECT *
-        FROM users
-        WHERE email = $1
-        LIMIT 1
-        `,
-        [normalizedEmail]
-      );
+      const result =
+        await db.query(
+          `
+          SELECT *
+          FROM users
+          WHERE email = $1
+          LIMIT 1
+          `,
+          [normalizedEmail]
+        );
 
       if (result.rows.length === 0) {
         return res.status(401).json({
@@ -868,280 +967,11 @@ router.post(
         });
       }
 
-      const user = result.rows[0];
+      const user =
+        result.rows[0];
 
       if (!user.password_hash) {
         return res.status(401).json({
           ok: false,
           message:
-            'Ce compte ne possède pas encore de mot de passe.'
-        });
-      }
-
-      const valid =
-        await verifyPassword(
-          password,
-          user.password_hash
-        );
-
-      if (!valid) {
-        return res.status(401).json({
-          ok: false,
-          message:
-            'E-mail ou mot de passe incorrect.'
-        });
-      }
-
-      const token =
-        signToken(user);
-
-      return res.json({
-        ok: true,
-        token,
-        user: publicUser(user)
-      });
-
-    } catch (error) {
-      console.error(
-        'Erreur login:',
-        error
-      );
-
-      return res.status(500).json({
-        ok: false,
-        message:
-          'Impossible de se connecter.'
-      });
-    }
-  }
-);
-
-/* =========================================================
-   PROFIL CONNECTÉ
-========================================================= */
-
-router.get(
-  '/me',
-  async (req, res) => {
-    try {
-      const db = getPool();
-
-      const auth =
-        req.headers.authorization || '';
-
-      if (!auth.startsWith('Bearer ')) {
-        return res.status(401).json({
-          ok: false,
-          message:
-            'Token manquant.'
-        });
-      }
-
-      const token =
-        auth.substring(7);
-
-      const decoded =
-        verifyToken(token);
-
-      const userId =
-        decoded.sub;
-
-      const result = await db.query(
-        `
-        SELECT
-          id,
-          name,
-          email,
-          phone,
-          country,
-          email_verified,
-          plan,
-          created_at
-        FROM users
-        WHERE id = $1
-        LIMIT 1
-        `,
-        [userId]
-      );
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({
-          ok: false,
-          message:
-            'Utilisateur introuvable.'
-        });
-      }
-
-      return res.json({
-        ok: true,
-        user:
-          publicUser(result.rows[0])
-      });
-
-    } catch (error) {
-      console.error(
-        'Erreur auth/me:',
-        error
-      );
-
-      return res.status(401).json({
-        ok: false,
-        message:
-          'Session invalide ou expirée.'
-      });
-    }
-  }
-);
-
-/* =========================================================
-   GOOGLE OAUTH GMAIL
-   Conservé pour plus tard
-========================================================= */
-
-function createGoogleOAuthClient() {
-  if (
-    !process.env.GOOGLE_CLIENT_ID ||
-    !process.env.GOOGLE_CLIENT_SECRET ||
-    !process.env.GOOGLE_REDIRECT_URI
-  ) {
-    throw new Error(
-      'Les variables Google OAuth ne sont pas configurées.'
-    );
-  }
-
-  return new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
-  );
-}
-
-router.get(
-  '/gmail/connect',
-  (req, res) => {
-    try {
-      const oauth2Client =
-        createGoogleOAuthClient();
-
-      const state =
-        crypto
-          .randomBytes(32)
-          .toString('hex');
-
-      const authorizationUrl =
-        oauth2Client.generateAuthUrl({
-          access_type: 'offline',
-          prompt: 'consent',
-          scope: [
-            'https://www.googleapis.com/auth/gmail.send'
-          ],
-          state
-        });
-
-      global.gmailOAuthState =
-        state;
-
-      res.redirect(
-        authorizationUrl
-      );
-
-    } catch (error) {
-      console.error(
-        'Erreur Gmail connect:',
-        error
-      );
-
-      res.status(500).json({
-        ok: false,
-        error: error.message
-      });
-    }
-  }
-);
-
-router.get(
-  '/gmail/callback',
-  async (req, res) => {
-    try {
-      const {
-        code,
-        state,
-        error
-      } = req.query;
-
-      if (error) {
-        return res.status(400).send(
-          '<h2>Connexion Gmail annulée</h2>'
-        );
-      }
-
-      if (!code) {
-        return res.status(400).send(
-          '<h2>Code Gmail manquant.</h2>'
-        );
-      }
-
-      if (
-        !state ||
-        state !== global.gmailOAuthState
-      ) {
-        return res.status(400).send(
-          '<h2>État Gmail invalide.</h2>'
-        );
-      }
-
-      const oauth2Client =
-        createGoogleOAuthClient();
-
-      const { tokens } =
-        await oauth2Client.getToken(code);
-
-      oauth2Client.setCredentials(tokens);
-
-      global.gmailOAuthState = null;
-
-      return res.send(`
-        <!DOCTYPE html>
-        <html lang="fr">
-        <head>
-          <meta charset="UTF-8">
-          <title>SellFlow AI</title>
-        </head>
-        <body style="
-          font-family:Arial;
-          max-width:700px;
-          margin:60px auto;
-          padding:20px;
-        ">
-          <h1>✅ Gmail connecté</h1>
-
-          <p>
-            L'autorisation Gmail a été effectuée
-            avec succès.
-          </p>
-
-          <p>
-            Le refresh token doit être stocké
-            côté serveur et ne doit pas être affiché
-            dans le navigateur.
-          </p>
-        </body>
-        </html>
-      `);
-
-    } catch (error) {
-      console.error(
-        'Erreur Gmail callback:',
-        error
-      );
-
-      return res.status(500).json({
-        ok: false,
-        message:
-          'Impossible de finaliser la connexion Gmail.'
-      });
-    }
-  }
-);
-
-module.exports = router;
+            'Ce compte ne possède pas encore de mot de 
