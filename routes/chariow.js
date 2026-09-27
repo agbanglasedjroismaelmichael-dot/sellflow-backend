@@ -6,6 +6,9 @@ const { verifyToken } = require('../utils/auth');
 
 const router = express.Router();
 
+const CHARIOW_API_BASE =
+  process.env.CHARIOW_API_BASE || 'https://api.chariow.com/v1';
+
 
 // =====================================================
 // AUTHENTIFICATION
@@ -109,8 +112,55 @@ function formatStore(row) {
 
 
 // =====================================================
+// VÉRIFICATION RÉELLE CHARIOW
+// =====================================================
+
+async function verifyChariowApiKey(apiKey) {
+  const response = await fetch(`${CHARIOW_API_BASE}/store`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      Accept: 'application/json'
+    }
+  });
+
+  let body = null;
+
+  try {
+    body = await response.json();
+  } catch (_) {
+    body = null;
+  }
+
+  if (!response.ok) {
+    const apiMessage =
+      body && body.message
+        ? body.message
+        : 'La clé API Chariow est invalide ou inaccessible.';
+
+    const error = new Error(apiMessage);
+    error.status = response.status;
+    error.chariow = body;
+
+    throw error;
+  }
+
+  if (!body || !body.data) {
+    throw new Error(
+      'Chariow a répondu, mais les informations de la boutique sont absentes.'
+    );
+  }
+
+  return {
+    store: body.data,
+    raw: body
+  };
+}
+
+
+// =====================================================
 // GET /chariow/stores
-// Récupérer toutes les boutiques de l'utilisateur
+// Toutes les boutiques de l'utilisateur
 // =====================================================
 
 router.get('/stores', requireAuth, async (req, res) => {
@@ -119,7 +169,11 @@ router.get('/stores', requireAuth, async (req, res) => {
 
     const userResult = await db.query(
       `
-      SELECT id, plan, subscription_status, subscription_expires_at
+      SELECT
+        id,
+        plan,
+        subscription_status,
+        subscription_expires_at
       FROM users
       WHERE id = $1
       LIMIT 1
@@ -167,10 +221,12 @@ router.get('/stores', requireAuth, async (req, res) => {
       subscription_expires_at: user.subscription_expires_at,
       limit,
       count: storesResult.rows.length,
-      available_slots: Math.max(0, limit - storesResult.rows.length),
+      available_slots: Math.max(
+        0,
+        limit - storesResult.rows.length
+      ),
       stores: storesResult.rows.map(formatStore)
     });
-
   } catch (error) {
     console.error('Erreur GET /chariow/stores:', error);
 
@@ -185,7 +241,7 @@ router.get('/stores', requireAuth, async (req, res) => {
 
 // =====================================================
 // GET /chariow/stores/:id
-// Récupérer une boutique précise
+// Une boutique précise
 // =====================================================
 
 router.get('/stores/:id', requireAuth, async (req, res) => {
@@ -226,7 +282,6 @@ router.get('/stores/:id', requireAuth, async (req, res) => {
       ok: true,
       store: formatStore(result.rows[0])
     });
-
   } catch (error) {
     console.error('Erreur GET /chariow/stores/:id:', error);
 
@@ -241,7 +296,7 @@ router.get('/stores/:id', requireAuth, async (req, res) => {
 
 // =====================================================
 // POST /chariow/stores
-// Ajouter une nouvelle boutique
+// AJOUTER UNE BOUTIQUE + VÉRIFIER LA CLÉ CHARIOW
 // =====================================================
 
 router.post('/stores', requireAuth, async (req, res) => {
@@ -297,9 +352,6 @@ router.post('/stores', requireAuth, async (req, res) => {
     }
 
     const apiKey = cleanString(req.body.api_key, 1000);
-    const storeId = cleanString(req.body.store_id, 255);
-    const storeName = cleanString(req.body.store_name, 255);
-    const storeUrl = cleanString(req.body.store_url, 1000);
 
     if (!apiKey) {
       return res.status(400).json({
@@ -308,38 +360,89 @@ router.post('/stores', requireAuth, async (req, res) => {
       });
     }
 
-    if (!storeName) {
+    // -------------------------------------------------
+    // VÉRIFICATION RÉELLE AUPRÈS DE CHARIOW
+    // -------------------------------------------------
+
+    let chariow;
+
+    try {
+      chariow = await verifyChariowApiKey(apiKey);
+    } catch (error) {
+      console.error(
+        'Échec vérification clé Chariow:',
+        error.message
+      );
+
       return res.status(400).json({
         ok: false,
-        message: 'Le nom de la boutique est obligatoire.'
+        code: 'CHARIOW_CONNECTION_FAILED',
+        message:
+          'Impossible de connecter cette boutique Chariow. Vérifiez que la clé API est correcte et active.'
       });
     }
 
-    // Empêcher deux fois exactement la même boutique
-    if (storeId) {
-      const existing = await db.query(
-        `
-        SELECT id
-        FROM chariow_connections
-        WHERE user_id = $1
-          AND store_id = $2
-        LIMIT 1
-        `,
-        [req.user.sub, storeId]
-      );
+    const remoteStore = chariow.store;
 
-      if (existing.rows.length) {
-        return res.status(409).json({
-          ok: false,
-          code: 'STORE_ALREADY_EXISTS',
-          message: 'Cette boutique Chariow est déjà connectée à votre compte.'
-        });
-      }
+    const storeId = cleanString(
+      remoteStore.id,
+      255
+    );
+
+    const storeName = cleanString(
+      remoteStore.name,
+      255
+    );
+
+    const storeUrl = cleanString(
+      remoteStore.url,
+      1000
+    );
+
+    if (!storeId) {
+      return res.status(400).json({
+        ok: false,
+        code: 'CHARIOW_STORE_ID_MISSING',
+        message:
+          'Chariow n’a pas retourné l’identifiant de la boutique.'
+      });
+    }
+
+    if (!storeName) {
+      return res.status(400).json({
+        ok: false,
+        code: 'CHARIOW_STORE_NAME_MISSING',
+        message:
+          'Chariow n’a pas retourné le nom de la boutique.'
+      });
+    }
+
+    // -------------------------------------------------
+    // EMPÊCHER LES DOUBLONS
+    // -------------------------------------------------
+
+    const existing = await db.query(
+      `
+      SELECT id
+      FROM chariow_connections
+      WHERE user_id = $1
+        AND store_id = $2
+      LIMIT 1
+      `,
+      [req.user.sub, storeId]
+    );
+
+    if (existing.rows.length) {
+      return res.status(409).json({
+        ok: false,
+        code: 'STORE_ALREADY_EXISTS',
+        message:
+          'Cette boutique Chariow est déjà connectée à votre compte.'
+      });
     }
 
     const id = crypto.randomUUID();
 
-    // Première boutique = automatiquement active
     const shouldBeActive = currentCount === 0;
 
     const result = await db.query(
@@ -353,6 +456,9 @@ router.post('/stores', requireAuth, async (req, res) => {
         store_url,
         connected,
         active,
+        last_sync_at,
+        last_sync_status,
+        last_sync_error,
         created_at,
         updated_at
       )
@@ -365,6 +471,9 @@ router.post('/stores', requireAuth, async (req, res) => {
         $6,
         TRUE,
         $7,
+        NOW(),
+        'success',
+        NULL,
         NOW(),
         NOW()
       )
@@ -386,7 +495,7 @@ router.post('/stores', requireAuth, async (req, res) => {
         id,
         req.user.sub,
         apiKey,
-        storeId || null,
+        storeId,
         storeName,
         storeUrl || null,
         shouldBeActive
@@ -395,16 +504,17 @@ router.post('/stores', requireAuth, async (req, res) => {
 
     return res.status(201).json({
       ok: true,
-      message: 'Boutique Chariow ajoutée avec succès.',
+      message:
+        'Boutique Chariow vérifiée et connectée avec succès.',
       store: formatStore(result.rows[0])
     });
-
   } catch (error) {
     console.error('Erreur POST /chariow/stores:', error);
 
     return res.status(500).json({
       ok: false,
-      message: 'Impossible d’ajouter la boutique Chariow.',
+      message:
+        'Impossible d’ajouter la boutique Chariow.',
       error: error.message
     });
   }
@@ -413,7 +523,7 @@ router.post('/stores', requireAuth, async (req, res) => {
 
 // =====================================================
 // PUT /chariow/stores/:id
-// Modifier une boutique
+// MODIFIER UNE BOUTIQUE
 // =====================================================
 
 router.put('/stores/:id', requireAuth, async (req, res) => {
@@ -438,27 +548,12 @@ router.put('/stores/:id', requireAuth, async (req, res) => {
       });
     }
 
-    const store = existing.rows[0];
+    const currentStore = existing.rows[0];
 
     const apiKey =
       req.body.api_key !== undefined
         ? cleanString(req.body.api_key, 1000)
-        : store.api_key;
-
-    const storeId =
-      req.body.store_id !== undefined
-        ? cleanString(req.body.store_id, 255)
-        : store.store_id;
-
-    const storeName =
-      req.body.store_name !== undefined
-        ? cleanString(req.body.store_name, 255)
-        : store.store_name;
-
-    const storeUrl =
-      req.body.store_url !== undefined
-        ? cleanString(req.body.store_url, 1000)
-        : store.store_url;
+        : currentStore.api_key;
 
     if (!apiKey) {
       return res.status(400).json({
@@ -467,32 +562,69 @@ router.put('/stores/:id', requireAuth, async (req, res) => {
       });
     }
 
-    if (!storeName) {
+    // Si une nouvelle clé est fournie,
+    // on la vérifie réellement.
+    let remoteStore;
+
+    try {
+      const verification =
+        await verifyChariowApiKey(apiKey);
+
+      remoteStore = verification.store;
+    } catch (error) {
       return res.status(400).json({
         ok: false,
-        message: 'Le nom de la boutique est obligatoire.'
+        code: 'CHARIOW_CONNECTION_FAILED',
+        message:
+          'La nouvelle clé API Chariow n’a pas pu être vérifiée.'
       });
     }
 
-    if (storeId) {
-      const duplicate = await db.query(
-        `
-        SELECT id
-        FROM chariow_connections
-        WHERE user_id = $1
-          AND store_id = $2
-          AND id <> $3
-        LIMIT 1
-        `,
-        [req.user.sub, storeId, req.params.id]
-      );
+    const storeId = cleanString(
+      remoteStore.id,
+      255
+    );
 
-      if (duplicate.rows.length) {
-        return res.status(409).json({
-          ok: false,
-          message: 'Cette boutique existe déjà sur votre compte.'
-        });
-      }
+    const storeName =
+      req.body.store_name !== undefined
+        ? cleanString(req.body.store_name, 255)
+        : cleanString(remoteStore.name, 255);
+
+    const storeUrl =
+      req.body.store_url !== undefined
+        ? cleanString(req.body.store_url, 1000)
+        : cleanString(remoteStore.url, 1000);
+
+    if (!storeId || !storeName) {
+      return res.status(400).json({
+        ok: false,
+        message:
+          'Les informations de la boutique retournées par Chariow sont incomplètes.'
+      });
+    }
+
+    const duplicate = await db.query(
+      `
+      SELECT id
+      FROM chariow_connections
+      WHERE user_id = $1
+        AND store_id = $2
+        AND id <> $3
+      LIMIT 1
+      `,
+      [
+        req.user.sub,
+        storeId,
+        req.params.id
+      ]
+    );
+
+    if (duplicate.rows.length) {
+      return res.status(409).json({
+        ok: false,
+        message:
+          'Cette boutique Chariow existe déjà sur votre compte.'
+      });
     }
 
     const result = await db.query(
@@ -504,6 +636,9 @@ router.put('/stores/:id', requireAuth, async (req, res) => {
         store_name = $3,
         store_url = $4,
         connected = TRUE,
+        last_sync_at = NOW(),
+        last_sync_status = 'success',
+        last_sync_error = NULL,
         updated_at = NOW()
       WHERE id = $5
         AND user_id = $6
@@ -523,7 +658,7 @@ router.put('/stores/:id', requireAuth, async (req, res) => {
       `,
       [
         apiKey,
-        storeId || null,
+        storeId,
         storeName,
         storeUrl || null,
         req.params.id,
@@ -533,16 +668,20 @@ router.put('/stores/:id', requireAuth, async (req, res) => {
 
     return res.json({
       ok: true,
-      message: 'Boutique mise à jour.',
+      message:
+        'Boutique Chariow vérifiée et mise à jour.',
       store: formatStore(result.rows[0])
     });
-
   } catch (error) {
-    console.error('Erreur PUT /chariow/stores/:id:', error);
+    console.error(
+      'Erreur PUT /chariow/stores/:id:',
+      error
+    );
 
     return res.status(500).json({
       ok: false,
-      message: 'Impossible de modifier la boutique.',
+      message:
+        'Impossible de modifier la boutique.',
       error: error.message
     });
   }
@@ -551,298 +690,421 @@ router.put('/stores/:id', requireAuth, async (req, res) => {
 
 // =====================================================
 // POST /chariow/stores/:id/activate
-// Choisir la boutique active
+// CHOISIR LA BOUTIQUE ACTIVE
 // =====================================================
 
-router.post('/stores/:id/activate', requireAuth, async (req, res) => {
-  const db = database.getPool();
+router.post(
+  '/stores/:id/activate',
+  requireAuth,
+  async (req, res) => {
+    const db = database.getPool();
 
-  try {
-    await db.query('BEGIN');
+    try {
+      await db.query('BEGIN');
 
-    const storeResult = await db.query(
-      `
-      SELECT *
-      FROM chariow_connections
-      WHERE id = $1
-        AND user_id = $2
-      LIMIT 1
-      `,
-      [req.params.id, req.user.sub]
-    );
+      const storeResult = await db.query(
+        `
+        SELECT *
+        FROM chariow_connections
+        WHERE id = $1
+          AND user_id = $2
+        LIMIT 1
+        `,
+        [req.params.id, req.user.sub]
+      );
 
-    if (!storeResult.rows.length) {
-      await db.query('ROLLBACK');
+      if (!storeResult.rows.length) {
+        await db.query('ROLLBACK');
 
-      return res.status(404).json({
+        return res.status(404).json({
+          ok: false,
+          message: 'Boutique introuvable.'
+        });
+      }
+
+      await db.query(
+        `
+        UPDATE chariow_connections
+        SET
+          active = FALSE,
+          updated_at = NOW()
+        WHERE user_id = $1
+        `,
+        [req.user.sub]
+      );
+
+      const result = await db.query(
+        `
+        UPDATE chariow_connections
+        SET
+          active = TRUE,
+          updated_at = NOW()
+        WHERE id = $1
+          AND user_id = $2
+        RETURNING
+          id,
+          store_id,
+          store_name,
+          store_url,
+          api_key,
+          connected,
+          active,
+          last_sync_at,
+          last_sync_status,
+          last_sync_error,
+          created_at,
+          updated_at
+        `,
+        [
+          req.params.id,
+          req.user.sub
+        ]
+      );
+
+      await db.query('COMMIT');
+
+      return res.json({
+        ok: true,
+        message:
+          'Boutique active sélectionnée.',
+        store: formatStore(result.rows[0])
+      });
+    } catch (error) {
+      try {
+        await db.query('ROLLBACK');
+      } catch (_) {}
+
+      console.error(
+        'Erreur activation boutique:',
+        error
+      );
+
+      return res.status(500).json({
         ok: false,
-        message: 'Boutique introuvable.'
+        message:
+          'Impossible de sélectionner cette boutique.',
+        error: error.message
       });
     }
-
-    // Une seule boutique active par utilisateur
-    await db.query(
-      `
-      UPDATE chariow_connections
-      SET active = FALSE,
-          updated_at = NOW()
-      WHERE user_id = $1
-      `,
-      [req.user.sub]
-    );
-
-    const result = await db.query(
-      `
-      UPDATE chariow_connections
-      SET active = TRUE,
-          updated_at = NOW()
-      WHERE id = $1
-        AND user_id = $2
-      RETURNING
-        id,
-        store_id,
-        store_name,
-        store_url,
-        api_key,
-        connected,
-        active,
-        last_sync_at,
-        last_sync_status,
-        last_sync_error,
-        created_at,
-        updated_at
-      `,
-      [req.params.id, req.user.sub]
-    );
-
-    await db.query('COMMIT');
-
-    return res.json({
-      ok: true,
-      message: 'Boutique active sélectionnée.',
-      store: formatStore(result.rows[0])
-    });
-
-  } catch (error) {
-    try {
-      await db.query('ROLLBACK');
-    } catch (_) {}
-
-    console.error('Erreur activation boutique:', error);
-
-    return res.status(500).json({
-      ok: false,
-      message: 'Impossible de sélectionner cette boutique.',
-      error: error.message
-    });
   }
-});
+);
 
 
 // =====================================================
 // GET /chariow/stores/active/current
-// Boutique actuellement active
+// BOUTIQUE ACTIVE
 // =====================================================
 
-router.get('/stores/active/current', requireAuth, async (req, res) => {
-  try {
-    const db = database.getPool();
+router.get(
+  '/stores/active/current',
+  requireAuth,
+  async (req, res) => {
+    try {
+      const db = database.getPool();
 
-    const result = await db.query(
-      `
-      SELECT
-        id,
-        store_id,
-        store_name,
-        store_url,
-        api_key,
-        connected,
-        active,
-        last_sync_at,
-        last_sync_status,
-        last_sync_error,
-        created_at,
-        updated_at
-      FROM chariow_connections
-      WHERE user_id = $1
-        AND active = TRUE
-      LIMIT 1
-      `,
-      [req.user.sub]
-    );
+      const result = await db.query(
+        `
+        SELECT
+          id,
+          store_id,
+          store_name,
+          store_url,
+          api_key,
+          connected,
+          active,
+          last_sync_at,
+          last_sync_status,
+          last_sync_error,
+          created_at,
+          updated_at
+        FROM chariow_connections
+        WHERE user_id = $1
+          AND active = TRUE
+        LIMIT 1
+        `,
+        [req.user.sub]
+      );
 
-    if (!result.rows.length) {
+      if (!result.rows.length) {
+        return res.json({
+          ok: true,
+          store: null,
+          message:
+            'Aucune boutique active.'
+        });
+      }
+
       return res.json({
         ok: true,
-        store: null,
-        message: 'Aucune boutique active.'
+        store: formatStore(result.rows[0])
+      });
+    } catch (error) {
+      console.error(
+        'Erreur boutique active:',
+        error
+      );
+
+      return res.status(500).json({
+        ok: false,
+        message:
+          'Impossible de récupérer la boutique active.',
+        error: error.message
       });
     }
-
-    return res.json({
-      ok: true,
-      store: formatStore(result.rows[0])
-    });
-
-  } catch (error) {
-    console.error('Erreur boutique active:', error);
-
-    return res.status(500).json({
-      ok: false,
-      message: 'Impossible de récupérer la boutique active.',
-      error: error.message
-    });
   }
-});
+);
 
 
 // =====================================================
 // DELETE /chariow/stores/:id
-// Supprimer une boutique
+// SUPPRIMER UNE BOUTIQUE
 // =====================================================
 
-router.delete('/stores/:id', requireAuth, async (req, res) => {
-  const db = database.getPool();
+router.delete(
+  '/stores/:id',
+  requireAuth,
+  async (req, res) => {
+    const db = database.getPool();
 
-  try {
-    await db.query('BEGIN');
+    try {
+      await db.query('BEGIN');
 
-    const storeResult = await db.query(
-      `
-      SELECT *
-      FROM chariow_connections
-      WHERE id = $1
-        AND user_id = $2
-      LIMIT 1
-      `,
-      [req.params.id, req.user.sub]
-    );
+      const storeResult = await db.query(
+        `
+        SELECT *
+        FROM chariow_connections
+        WHERE id = $1
+          AND user_id = $2
+        LIMIT 1
+        `,
+        [
+          req.params.id,
+          req.user.sub
+        ]
+      );
 
-    if (!storeResult.rows.length) {
-      await db.query('ROLLBACK');
+      if (!storeResult.rows.length) {
+        await db.query('ROLLBACK');
 
-      return res.status(404).json({
-        ok: false,
-        message: 'Boutique introuvable.'
-      });
-    }
+        return res.status(404).json({
+          ok: false,
+          message:
+            'Boutique introuvable.'
+        });
+      }
 
-    const deletedStore = storeResult.rows[0];
+      const deletedStore =
+        storeResult.rows[0];
 
-    await db.query(
-      `
-      DELETE FROM chariow_connections
-      WHERE id = $1
-        AND user_id = $2
-      `,
-      [req.params.id, req.user.sub]
-    );
-
-    // Si la boutique supprimée était active,
-    // on active automatiquement la première restante.
-    if (deletedStore.active) {
       await db.query(
         `
-        UPDATE chariow_connections
-        SET active = TRUE,
-            updated_at = NOW()
-        WHERE id = (
-          SELECT id
-          FROM chariow_connections
-          WHERE user_id = $1
-          ORDER BY created_at ASC
-          LIMIT 1
-        )
+        DELETE FROM chariow_connections
+        WHERE id = $1
+          AND user_id = $2
         `,
-        [req.user.sub]
+        [
+          req.params.id,
+          req.user.sub
+        ]
       );
+
+      if (deletedStore.active) {
+        await db.query(
+          `
+          UPDATE chariow_connections
+          SET
+            active = TRUE,
+            updated_at = NOW()
+          WHERE id = (
+            SELECT id
+            FROM chariow_connections
+            WHERE user_id = $1
+            ORDER BY created_at ASC
+            LIMIT 1
+          )
+          `,
+          [req.user.sub]
+        );
+      }
+
+      await db.query('COMMIT');
+
+      return res.json({
+        ok: true,
+        message:
+          'Boutique supprimée avec succès.'
+      });
+    } catch (error) {
+      try {
+        await db.query('ROLLBACK');
+      } catch (_) {}
+
+      console.error(
+        'Erreur suppression boutique:',
+        error
+      );
+
+      return res.status(500).json({
+        ok: false,
+        message:
+          'Impossible de supprimer la boutique.',
+        error: error.message
+      });
     }
-
-    await db.query('COMMIT');
-
-    return res.json({
-      ok: true,
-      message: 'Boutique supprimée avec succès.'
-    });
-
-  } catch (error) {
-    try {
-      await db.query('ROLLBACK');
-    } catch (_) {}
-
-    console.error('Erreur suppression boutique:', error);
-
-    return res.status(500).json({
-      ok: false,
-      message: 'Impossible de supprimer la boutique.',
-      error: error.message
-    });
   }
-});
+);
 
 
 // =====================================================
 // POST /chariow/stores/:id/sync-status
-// Mettre à jour l'état de synchronisation
+// SYNCHRONISATION RÉELLE
 // =====================================================
 
-router.post('/stores/:id/sync-status', requireAuth, async (req, res) => {
-  try {
-    const db = database.getPool();
+router.post(
+  '/stores/:id/sync-status',
+  requireAuth,
+  async (req, res) => {
+    try {
+      const db = database.getPool();
 
-    const status = cleanString(req.body.status, 50) || 'success';
-    const errorMessage = cleanString(req.body.error, 2000);
+      const result = await db.query(
+        `
+        SELECT
+          id,
+          api_key
+        FROM chariow_connections
+        WHERE id = $1
+          AND user_id = $2
+        LIMIT 1
+        `,
+        [
+          req.params.id,
+          req.user.sub
+        ]
+      );
 
-    const result = await db.query(
-      `
-      UPDATE chariow_connections
-      SET
-        last_sync_at = NOW(),
-        last_sync_status = $1,
-        last_sync_error = $2,
-        updated_at = NOW()
-      WHERE id = $3
-        AND user_id = $4
-      RETURNING
-        id,
-        store_id,
-        store_name,
-        connected,
-        active,
-        last_sync_at,
-        last_sync_status,
-        last_sync_error
-      `,
-      [
-        status,
-        errorMessage || null,
-        req.params.id,
-        req.user.sub
-      ]
-    );
+      if (!result.rows.length) {
+        return res.status(404).json({
+          ok: false,
+          message:
+            'Boutique introuvable.'
+        });
+      }
 
-    if (!result.rows.length) {
-      return res.status(404).json({
+      const store =
+        result.rows[0];
+
+      // Vérification réelle auprès de Chariow
+      let verification;
+
+      try {
+        verification =
+          await verifyChariowApiKey(
+            store.api_key
+          );
+      } catch (error) {
+        await db.query(
+          `
+          UPDATE chariow_connections
+          SET
+            connected = FALSE,
+            last_sync_at = NOW(),
+            last_sync_status = 'error',
+            last_sync_error = $1,
+            updated_at = NOW()
+          WHERE id = $2
+            AND user_id = $3
+          `,
+          [
+            error.message,
+            req.params.id,
+            req.user.sub
+          ]
+        );
+
+        return res.status(400).json({
+          ok: false,
+          code:
+            'CHARIOW_SYNC_FAILED',
+          message:
+            'La synchronisation Chariow a échoué. La clé API peut être invalide ou révoquée.'
+        });
+      }
+
+      const remoteStore =
+        verification.store;
+
+      const updated =
+        await db.query(
+          `
+          UPDATE chariow_connections
+          SET
+            store_id = $1,
+            store_name = $2,
+            store_url = $3,
+            connected = TRUE,
+            last_sync_at = NOW(),
+            last_sync_status = 'success',
+            last_sync_error = NULL,
+            updated_at = NOW()
+          WHERE id = $4
+            AND user_id = $5
+          RETURNING
+            id,
+            store_id,
+            store_name,
+            store_url,
+            api_key,
+            connected,
+            active,
+            last_sync_at,
+            last_sync_status,
+            last_sync_error,
+            created_at,
+            updated_at
+          `,
+          [
+            cleanString(
+              remoteStore.id,
+              255
+            ),
+            cleanString(
+              remoteStore.name,
+              255
+            ),
+            cleanString(
+              remoteStore.url,
+              1000
+            ) || null,
+            req.params.id,
+            req.user.sub
+          ]
+        );
+
+      return res.json({
+        ok: true,
+        message:
+          'Boutique Chariow synchronisée avec succès.',
+        store:
+          formatStore(
+            updated.rows[0]
+          )
+      });
+    } catch (error) {
+      console.error(
+        'Erreur sync-status:',
+        error
+      );
+
+      return res.status(500).json({
         ok: false,
-        message: 'Boutique introuvable.'
+        message:
+          'Impossible de synchroniser la boutique.',
+        error: error.message
       });
     }
-
-    return res.json({
-      ok: true,
-      store: result.rows[0]
-    });
-
-  } catch (error) {
-    console.error('Erreur sync-status:', error);
-
-    return res.status(500).json({
-      ok: false,
-      message: 'Impossible de mettre à jour la synchronisation.',
-      error: error.message
-    });
   }
-});
+);
 
 
 module.exports = router;
