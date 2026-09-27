@@ -3,6 +3,9 @@ const { getPool } = require('../config/database');
 async function initDatabase() {
   const db = getPool();
 
+  // =========================
+  // TABLE USERS
+  // =========================
   await db.query(`
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY,
@@ -12,11 +15,46 @@ async function initDatabase() {
       country VARCHAR(100),
       password_hash TEXT,
       email_verified BOOLEAN NOT NULL DEFAULT FALSE,
-      plan VARCHAR(50),
+      plan VARCHAR(50) DEFAULT 'free',
+
+      subscription_status VARCHAR(30) NOT NULL DEFAULT 'inactive',
+      subscription_started_at TIMESTAMPTZ,
+      subscription_expires_at TIMESTAMPTZ,
+      reminder_7_sent_at TIMESTAMPTZ,
+      reminder_3_sent_at TIMESTAMPTZ,
+      reminder_1_sent_at TIMESTAMPTZ,
+      expired_notice_sent_at TIMESTAMPTZ,
+
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(30) NOT NULL DEFAULT 'inactive';
+
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS subscription_started_at TIMESTAMPTZ;
+
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMPTZ;
+
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS reminder_7_sent_at TIMESTAMPTZ;
+
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS reminder_3_sent_at TIMESTAMPTZ;
+
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS reminder_1_sent_at TIMESTAMPTZ;
+
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS expired_notice_sent_at TIMESTAMPTZ;
+  `);
+
+  // =========================
+  // EMAIL VERIFICATION
+  // =========================
+  await db.query(`
     CREATE TABLE IF NOT EXISTS email_verification_codes (
       id UUID PRIMARY KEY,
       user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -27,7 +65,12 @@ async function initDatabase() {
       used BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
 
+  // =========================
+  // REGISTRATION REQUESTS
+  // =========================
+  await db.query(`
     CREATE TABLE IF NOT EXISTS registration_requests (
       id UUID PRIMARY KEY,
       name VARCHAR(120) NOT NULL,
@@ -40,7 +83,12 @@ async function initDatabase() {
       verified BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
 
+  // =========================
+  // SESSIONS
+  // =========================
+  await db.query(`
     CREATE TABLE IF NOT EXISTS sessions (
       id UUID PRIMARY KEY,
       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -48,7 +96,12 @@ async function initDatabase() {
       expires_at TIMESTAMPTZ NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
 
+  // =========================
+  // PAYMENTS
+  // =========================
+  await db.query(`
     CREATE TABLE IF NOT EXISTS payments (
       id UUID PRIMARY KEY,
       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -61,19 +114,53 @@ async function initDatabase() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
 
+  // =========================
+  // CHARIOW MULTI-BOUTIQUES
+  // =========================
+  await db.query(`
     CREATE TABLE IF NOT EXISTS chariow_connections (
       id UUID PRIMARY KEY,
       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
       api_key TEXT NOT NULL,
+
       store_id VARCHAR(255),
       store_name VARCHAR(255),
       store_url TEXT,
+
       connected BOOLEAN NOT NULL DEFAULT FALSE,
+      active BOOLEAN NOT NULL DEFAULT FALSE,
+
+      last_sync_at TIMESTAMPTZ,
+      last_sync_status VARCHAR(50),
+      last_sync_error TEXT,
+
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
 
+  // Ajout des colonnes si la table existait déjà
+  await db.query(`
+    ALTER TABLE chariow_connections
+      ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT FALSE;
+
+    ALTER TABLE chariow_connections
+      ADD COLUMN IF NOT EXISTS last_sync_at TIMESTAMPTZ;
+
+    ALTER TABLE chariow_connections
+      ADD COLUMN IF NOT EXISTS last_sync_status VARCHAR(50);
+
+    ALTER TABLE chariow_connections
+      ADD COLUMN IF NOT EXISTS last_sync_error TEXT;
+  `);
+
+  // =========================
+  // INDEX
+  // =========================
+  await db.query(`
     CREATE INDEX IF NOT EXISTS idx_users_email
       ON users(email);
 
@@ -91,6 +178,12 @@ async function initDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_chariow_user
       ON chariow_connections(user_id);
+
+    CREATE INDEX IF NOT EXISTS idx_chariow_active
+      ON chariow_connections(user_id, active);
+
+    CREATE INDEX IF NOT EXISTS idx_users_subscription_expiry
+      ON users(subscription_expires_at);
   `);
 
   console.log('Base de données SellFlow initialisée.');
