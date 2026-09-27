@@ -209,4 +209,201 @@ async function runSubscriptionReminders() {
       id,
       email,
       name,
-      plan
+      plan,
+      subscription_status,
+      subscription_expires_at
+    FROM users
+    WHERE
+      subscription_status = 'active'
+      AND subscription_expires_at IS NOT NULL
+    ORDER BY subscription_expires_at ASC
+    `
+  );
+
+  const now = new Date();
+
+  let checked = 0;
+  let expired = 0;
+  let reminders = 0;
+
+  for (const user of users.rows) {
+    checked++;
+
+    const expiresAt =
+      new Date(
+        user.subscription_expires_at
+      );
+
+    if (expiresAt <= now) {
+      await db.query(
+        `
+        UPDATE users
+        SET
+          subscription_status = 'expired',
+          expired_notice_sent_at =
+            COALESCE(
+              expired_notice_sent_at,
+              NOW()
+            ),
+          updated_at = NOW()
+        WHERE id = $1
+        `,
+        [user.id]
+      );
+
+      expired++;
+      continue;
+    }
+
+    const difference =
+      expiresAt.getTime() -
+      now.getTime();
+
+    const daysRemaining =
+      Math.ceil(
+        difference /
+        (1000 * 60 * 60 * 24)
+      );
+
+    /*
+     * Les rappels sont actuellement enregistrés
+     * en base.
+     *
+     * L'envoi email sera branché plus tard
+     * avec Resend ou SMTP.
+     */
+
+    if (
+      daysRemaining <= 7 &&
+      daysRemaining > 3
+    ) {
+      const result = await db.query(
+        `
+        UPDATE users
+        SET
+          reminder_7_sent_at =
+            COALESCE(
+              reminder_7_sent_at,
+              NOW()
+            ),
+          updated_at = NOW()
+        WHERE id = $1
+          AND reminder_7_sent_at IS NULL
+        RETURNING id
+        `,
+        [user.id]
+      );
+
+      if (result.rows.length) {
+        reminders++;
+      }
+    }
+
+    if (
+      daysRemaining <= 3 &&
+      daysRemaining > 1
+    ) {
+      const result = await db.query(
+        `
+        UPDATE users
+        SET
+          reminder_3_sent_at =
+            COALESCE(
+              reminder_3_sent_at,
+              NOW()
+            ),
+          updated_at = NOW()
+        WHERE id = $1
+          AND reminder_3_sent_at IS NULL
+        RETURNING id
+        `,
+        [user.id]
+      );
+
+      if (result.rows.length) {
+        reminders++;
+      }
+    }
+
+    if (daysRemaining <= 1) {
+      const result = await db.query(
+        `
+        UPDATE users
+        SET
+          reminder_1_sent_at =
+            COALESCE(
+              reminder_1_sent_at,
+              NOW()
+            ),
+          updated_at = NOW()
+        WHERE id = $1
+          AND reminder_1_sent_at IS NULL
+        RETURNING id
+        `,
+        [user.id]
+      );
+
+      if (result.rows.length) {
+        reminders++;
+      }
+    }
+  }
+
+  return {
+    checked,
+    expired,
+    reminders
+  };
+}
+
+function startSubscriptionReminderWorker() {
+  const interval =
+    Number(
+      process.env.SUBSCRIPTION_CHECK_INTERVAL_MS
+    ) || 21600000;
+
+  setTimeout(async () => {
+    try {
+      const result =
+        await runSubscriptionReminders();
+
+      console.log(
+        'Vérification abonnements:',
+        result
+      );
+    } catch (error) {
+      console.error(
+        'Erreur vérification abonnements:',
+        error
+      );
+    }
+  }, 5000);
+
+  setInterval(async () => {
+    try {
+      const result =
+        await runSubscriptionReminders();
+
+      console.log(
+        'Vérification abonnements:',
+        result
+      );
+    } catch (error) {
+      console.error(
+        'Erreur worker abonnements:',
+        error
+      );
+    }
+  }, interval);
+}
+
+module.exports = {
+  PLAN_DURATIONS,
+  normalizePlan,
+  normalizeBillingCycle,
+  getPlanDuration,
+  getSubscription,
+  activateSubscription,
+  runSubscriptionReminders,
+  startSubscriptionReminderWorker
+};
