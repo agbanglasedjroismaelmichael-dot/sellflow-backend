@@ -37,6 +37,10 @@ function publicUser(user) {
   };
 }
 
+function isDevAuthBypassEnabled() {
+  return process.env.DEV_AUTH_BYPASS === 'true';
+}
+
 function getResend() {
   if (!process.env.RESEND_API_KEY) {
     throw new Error('RESEND_API_KEY n’est pas configuré.');
@@ -162,6 +166,7 @@ router.post(
       } = req.body || {};
 
       const normalizedEmail = normalizeEmail(email);
+
       const finalPhone =
         phone_international ||
         ((dial_code || '') + (phone || ''));
@@ -225,7 +230,14 @@ router.post(
         }
       }
 
-      const code = generateVerificationCode();
+      /*
+        En mode test, le code est fixé à 000000.
+        En mode normal, un vrai code aléatoire est généré.
+      */
+
+      const code = isDevAuthBypassEnabled()
+        ? '000000'
+        : generateVerificationCode();
 
       const codeHash = await hashPassword(code);
 
@@ -267,6 +279,30 @@ router.post(
           codeHash
         ]
       );
+
+      /*
+        MODE TEST :
+        On ne contacte pas Resend.
+      */
+
+      if (isDevAuthBypassEnabled()) {
+        console.log(
+          `⚠️ DEV_AUTH_BYPASS actif — code de test pour ${normalizedEmail}: 000000`
+        );
+
+        return res.json({
+          ok: true,
+          message: 'Mode test : utilise le code 000000.',
+          verification_token: verificationId,
+          dev_mode: true,
+          test_code: '000000'
+        });
+      }
+
+      /*
+        MODE NORMAL :
+        Envoi réel par Resend.
+      */
 
       await sendVerificationEmail({
         email: normalizedEmail,
@@ -386,10 +422,25 @@ router.post(
         });
       }
 
-      const validCode = await verifyPassword(
-        String(code),
-        request.code_hash
-      );
+      /*
+        MODE TEST :
+        Le code 000000 est accepté uniquement
+        lorsque DEV_AUTH_BYPASS=true.
+      */
+
+      let validCode = false;
+
+      if (
+        isDevAuthBypassEnabled() &&
+        String(code).trim() === '000000'
+      ) {
+        validCode = true;
+      } else {
+        validCode = await verifyPassword(
+          String(code),
+          request.code_hash
+        );
+      }
 
       if (!validCode) {
         await db.query(
@@ -423,7 +474,9 @@ router.post(
         verified: true,
         verification_token: request.id,
         verificationId: request.id,
-        message: 'Adresse e-mail vérifiée.'
+        message: isDevAuthBypassEnabled()
+          ? 'Adresse e-mail vérifiée en mode test.'
+          : 'Adresse e-mail vérifiée.'
       });
 
     } catch (error) {
@@ -1046,12 +1099,6 @@ router.get(
       oauth2Client.setCredentials(tokens);
 
       global.gmailOAuthState = null;
-
-      /*
-        IMPORTANT :
-        Le refresh token n'est volontairement
-        PAS affiché dans le navigateur.
-      */
 
       return res.send(`
         <!DOCTYPE html>
