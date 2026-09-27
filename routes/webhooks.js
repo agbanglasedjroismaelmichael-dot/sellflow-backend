@@ -6,6 +6,10 @@ const {
   verifyPayment
 } = require('../services/moneroo');
 
+const {
+  activateSubscription
+} = require('../services/subscriptions');
+
 const router = express.Router();
 
 /**
@@ -14,12 +18,18 @@ const router = express.Router();
  * ============================================================
  *
  * IMPORTANT :
- * Le webhook ne doit jamais être considéré comme une preuve
- * suffisante d'un paiement réussi.
+ * Un webhook n'est pas considéré comme une preuve suffisante
+ * d'un paiement réussi.
  *
- * Lorsqu'un événement de succès est reçu, SellFlow vérifie
- * directement le paiement auprès de Moneroo avant d'activer
- * l'abonnement.
+ * Lorsqu'un événement de succès est reçu :
+ *
+ * 1. SellFlow récupère le paiement concerné.
+ * 2. SellFlow vérifie directement le paiement auprès de Moneroo.
+ * 3. Le paiement est marqué comme payé.
+ * 4. L'abonnement est activé.
+ *
+ * Le service d'abonnement possède une protection contre
+ * les doubles activations.
  *
  * ============================================================
  */
@@ -30,9 +40,6 @@ const router = express.Router();
  * ============================================================
  */
 
-/**
- * Récupérer le pool PostgreSQL.
- */
 function getDatabasePool() {
   if (
     database &&
@@ -48,8 +55,7 @@ function getDatabasePool() {
 
 
 /**
- * Extraire l'identifiant du paiement depuis différents
- * formats possibles du webhook.
+ * Extraire l'identifiant du paiement.
  */
 function extractPaymentId(payload) {
   return (
@@ -78,7 +84,7 @@ function extractEventName(payload) {
 
 
 /**
- * Extraire le statut du paiement du webhook.
+ * Extraire le statut du paiement.
  */
 function extractWebhookStatus(payload) {
   return (
@@ -110,7 +116,7 @@ function normalizeStatus(status) {
 
 
 /**
- * Vérifier si un statut représente un paiement réussi.
+ * Vérifier si un statut représente un succès.
  */
 function isSuccessfulStatus(status) {
   return [
@@ -126,7 +132,7 @@ function isSuccessfulStatus(status) {
 
 
 /**
- * Vérifier si un statut représente un paiement échoué.
+ * Vérifier si un statut représente un échec.
  */
 function isFailedStatus(status) {
   return [
@@ -204,8 +210,24 @@ function isFailedEvent(
 
 
 /**
+ * Extraire le statut réel retourné par Moneroo.
+ */
+function extractVerifiedStatus(payment) {
+  return (
+    payment?.data?.status ||
+    payment?.data?.payment_status ||
+    payment?.data?.payment?.status ||
+    payment?.status ||
+    payment?.payment_status ||
+    payment?.payment?.status ||
+    null
+  );
+}
+
+
+/**
  * ============================================================
- * ROUTE WEBHOOK
+ * ROUTE WEBHOOK MONEROO
  * ============================================================
  */
 
@@ -219,16 +241,17 @@ router.post(
 
       /**
        * --------------------------------------------------------
-       * 1. Récupérer le payload
+       * 1. PAYLOAD
        * --------------------------------------------------------
        */
 
       const payload =
         req.body || {};
 
+
       /**
        * --------------------------------------------------------
-       * 2. Identifier l'événement
+       * 2. IDENTIFICATION
        * --------------------------------------------------------
        */
 
@@ -246,9 +269,10 @@ router.post(
         }
       );
 
+
       /**
        * --------------------------------------------------------
-       * 3. Vérifier paymentId
+       * 3. PAYMENT ID OBLIGATOIRE
        * --------------------------------------------------------
        */
 
@@ -263,18 +287,20 @@ router.post(
         });
       }
 
+
       /**
        * --------------------------------------------------------
-       * 4. Connexion PostgreSQL
+       * 4. DATABASE
        * --------------------------------------------------------
        */
 
       const db =
         getDatabasePool();
 
+
       /**
        * --------------------------------------------------------
-       * 5. Rechercher le paiement
+       * 5. RECHERCHE DU PAIEMENT
        * --------------------------------------------------------
        */
 
@@ -300,12 +326,13 @@ router.post(
             AND provider_reference = $1
           LIMIT 1
           `,
-          [paymentId]
+          [String(paymentId)]
         );
+
 
       /**
        * --------------------------------------------------------
-       * Paiement inconnu
+       * PAIEMENT INCONNU
        * --------------------------------------------------------
        */
 
@@ -326,10 +353,11 @@ router.post(
       const payment =
         paymentResult.rows[0];
 
+
       /**
-       * --------------------------------------------------------
-       * 6. Événement de succès
-       * --------------------------------------------------------
+       * ========================================================
+       * 6. PAIEMENT RÉUSSI
+       * ========================================================
        */
 
       if (
@@ -341,27 +369,7 @@ router.post(
 
         /**
          * ------------------------------------------------------
-         * Protection contre les doublons
-         * ------------------------------------------------------
-         */
-
-        if (
-          payment.status === 'paid'
-        ) {
-          console.log(
-            'ℹ️ Paiement déjà traité:',
-            paymentId
-          );
-
-          return res.json({
-            ok: true,
-            already_processed: true
-          });
-        }
-
-        /**
-         * ------------------------------------------------------
-         * Vérification DIRECTE auprès de Moneroo
+         * VÉRIFICATION DIRECTE MONEROO
          * ------------------------------------------------------
          */
 
@@ -388,29 +396,27 @@ router.post(
           });
         }
 
+
         /**
          * ------------------------------------------------------
-         * Récupérer le statut réel
+         * STATUT RÉEL
          * ------------------------------------------------------
          */
 
         const verifiedStatus =
-          verifiedPayment?.data?.status ||
-          verifiedPayment?.data?.payment_status ||
-          verifiedPayment?.data?.payment?.status ||
-          verifiedPayment?.status ||
-          verifiedPayment?.payment_status ||
-          verifiedPayment?.payment?.status ||
-          null;
+          extractVerifiedStatus(
+            verifiedPayment
+          );
 
         console.log(
           '🔎 Statut Moneroo vérifié:',
           verifiedStatus
         );
 
+
         /**
          * ------------------------------------------------------
-         * Le paiement doit être réellement confirmé
+         * LE PAIEMENT DOIT ÊTRE CONFIRMÉ
          * ------------------------------------------------------
          */
 
@@ -435,135 +441,158 @@ router.post(
           });
         }
 
-        /**
-         * ------------------------------------------------------
-         * 7. Marquer le paiement comme payé
-         * ------------------------------------------------------
-         */
-
-        const updateResult =
-          await db.query(
-            `
-            UPDATE payments
-            SET
-              status = 'paid',
-              paid_at = COALESCE(
-                paid_at,
-                NOW()
-              ),
-              updated_at = NOW()
-            WHERE id = $1
-              AND status <> 'paid'
-            RETURNING id
-            `,
-            [payment.id]
-          );
 
         /**
          * ------------------------------------------------------
-         * Si quelqu'un a déjà traité le paiement entre-temps
+         * 7. MARQUER LE PAIEMENT COMME PAYÉ
          * ------------------------------------------------------
+         *
+         * Si le paiement est déjà paid, on ne considère PAS
+         * cela comme une erreur.
+         *
+         * On continue vers activateSubscription().
+         *
+         * C'est important :
+         *
+         * paiement marqué paid
+         *        ↓
+         * activation échoue
+         *        ↓
+         * webhook renvoyé
+         *        ↓
+         * activation peut être retentée
+         *
+         * Le service subscriptions.js empêche ensuite
+         * une double activation.
          */
+
+        let paymentWasJustMarkedPaid = false;
 
         if (
-          updateResult.rows.length === 0
+          payment.status !== 'paid'
         ) {
 
+          const updateResult =
+            await db.query(
+              `
+              UPDATE payments
+              SET
+                status = 'paid',
+                paid_at = COALESCE(
+                  paid_at,
+                  NOW()
+                ),
+                updated_at = NOW()
+              WHERE id = $1
+                AND status <> 'paid'
+              RETURNING id
+              `,
+              [payment.id]
+            );
+
+          paymentWasJustMarkedPaid =
+            updateResult.rows.length > 0;
+
+        }
+
+
+        /**
+         * ------------------------------------------------------
+         * 8. ACTIVER L'ABONNEMENT
+         * ------------------------------------------------------
+         *
+         * Les données viennent de la base de données,
+         * pas du webhook.
+         */
+
+        try {
+
+          if (
+            typeof activateSubscription !==
+            'function'
+          ) {
+            throw new Error(
+              'activateSubscription() introuvable.'
+            );
+          }
+
+          const subscription =
+            await activateSubscription(
+              payment.user_id,
+              payment.plan,
+              payment.provider_reference,
+              payment.billing_cycle
+            );
+
+
+          /**
+           * ----------------------------------------------------
+           * SUCCÈS
+           * ----------------------------------------------------
+           */
+
           console.log(
-            'ℹ️ Paiement déjà traité simultanément:',
-            paymentId
+            '✅ Paiement confirmé + abonnement activé:',
+            {
+              paymentId,
+              userId: payment.user_id,
+              plan: payment.plan,
+              billingCycle:
+                payment.billing_cycle,
+              alreadyActivated:
+                subscription?.already_activated ||
+                false
+            }
           );
 
           return res.json({
             ok: true,
-            already_processed: true
+            processed: true,
+            payment_id: paymentId,
+            status: 'paid',
+            subscription_activated: true,
+            already_activated:
+              subscription?.already_activated ||
+              false
           });
-        }
-
-        /**
-         * ------------------------------------------------------
-         * 8. Activer l'abonnement
-         * ------------------------------------------------------
-         */
-
-        let activateSubscription;
-
-        try {
-
-          const subscriptionService =
-            require('../services/subscriptions');
-
-          activateSubscription =
-            subscriptionService
-              .activateSubscription;
 
         } catch (subscriptionError) {
 
+          /**
+           * ----------------------------------------------------
+           * IMPORTANT
+           * ----------------------------------------------------
+           *
+           * Le paiement est déjà confirmé et payé.
+           *
+           * On retourne une erreur afin que Moneroo puisse
+           * éventuellement renvoyer le webhook.
+           *
+           * Lors du prochain passage,
+           * activateSubscription() pourra reprendre le travail.
+           */
+
           console.error(
-            '❌ Service abonnement introuvable:',
+            '❌ Activation abonnement impossible:',
             subscriptionError
           );
 
-          /**
-           * Le paiement est déjà marqué payé.
-           *
-           * On retourne une erreur pour que le problème
-           * soit visible dans les logs et puisse être corrigé.
-           */
-
           return res.status(500).json({
             ok: false,
             error:
-              'SUBSCRIPTION_SERVICE_UNAVAILABLE'
+              'SUBSCRIPTION_ACTIVATION_FAILED',
+            payment_id: paymentId,
+            payment_marked_paid:
+              paymentWasJustMarkedPaid
           });
         }
-
-        if (
-          typeof activateSubscription !==
-          'function'
-        ) {
-
-          console.error(
-            '❌ activateSubscription() introuvable.'
-          );
-
-          return res.status(500).json({
-            ok: false,
-            error:
-              'SUBSCRIPTION_ACTIVATION_UNAVAILABLE'
-          });
-        }
-
-        /**
-         * ------------------------------------------------------
-         * Activation avec les données de la DB
-         * ------------------------------------------------------
-         */
-
-        await activateSubscription(
-          payment.user_id,
-          payment.plan,
-          payment.provider_reference,
-          payment.billing_cycle
-        );
-
-        console.log(
-          '✅ Paiement confirmé + abonnement activé:',
-          paymentId
-        );
-
-        return res.json({
-          ok: true,
-          processed: true,
-          payment_id: paymentId,
-          status: 'paid'
-        });
       }
 
+
       /**
-       * --------------------------------------------------------
-       * 9. Paiement échoué / annulé
-       * --------------------------------------------------------
+       * ========================================================
+       * 9. PAIEMENT ÉCHOUÉ / ANNULÉ
+       * ========================================================
        */
 
       if (
@@ -574,7 +603,8 @@ router.post(
       ) {
 
         /**
-         * Ne jamais remplacer "paid" par "failed".
+         * Ne jamais transformer un paiement déjà payé
+         * en paiement échoué.
          */
 
         if (
@@ -592,10 +622,12 @@ router.post(
           });
         }
 
+
         const failureReason =
           eventName ||
           extractWebhookStatus(payload) ||
           'Payment failed';
+
 
         await db.query(
           `
@@ -605,6 +637,7 @@ router.post(
             failure_reason = $2,
             updated_at = NOW()
           WHERE id = $1
+            AND status <> 'paid'
           `,
           [
             payment.id,
@@ -612,10 +645,12 @@ router.post(
           ]
         );
 
+
         console.log(
           '❌ Paiement échoué:',
           paymentId
         );
+
 
         return res.json({
           ok: true,
@@ -625,10 +660,11 @@ router.post(
         });
       }
 
+
       /**
-       * --------------------------------------------------------
-       * 10. Événement non traité
-       * --------------------------------------------------------
+       * ========================================================
+       * 10. ÉVÉNEMENT NON TRAITÉ
+       * ========================================================
        */
 
       console.log(
@@ -636,11 +672,14 @@ router.post(
         eventName
       );
 
+
       return res.json({
         ok: true,
         ignored: true,
-        event: eventName || null,
-        payment_id: paymentId
+        event:
+          eventName || null,
+        payment_id:
+          paymentId
       });
 
     } catch (error) {
@@ -658,5 +697,6 @@ router.post(
     }
   }
 );
+
 
 module.exports = router;
