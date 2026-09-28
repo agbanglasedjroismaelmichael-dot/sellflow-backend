@@ -1,916 +1,1069 @@
 const express = require('express');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
 const { google } = require('googleapis');
 
 const { getPool } = require('../config/database');
 
-const {
-  hashPassword,
-  comparePassword,
-  signToken,
-  authMiddleware
-} = require('../utils/auth');
-
 const router = express.Router();
-const pool = getPool();
-
-const FRONTEND_URL = (
-  process.env.FRONTEND_URL ||
-  'https://sellflowic.netlify.app'
-)
-  .trim()
-  .replace(/\/+$/, '');
-
-const BACKEND_URL = (
-  process.env.BACKEND_URL ||
-  'https://sellflow-backend.onrender.com'
-)
-  .trim()
-  .replace(/\/+$/, '');
-
-const GOOGLE_CLIENT_ID =
-  process.env.GOOGLE_CLIENT_ID || '';
-
-const GOOGLE_CLIENT_SECRET =
-  process.env.GOOGLE_CLIENT_SECRET || '';
-
-const GOOGLE_REDIRECT_URI =
-  process.env.GOOGLE_REDIRECT_URI ||
-  BACKEND_URL + '/auth/gmail/callback';
 
 /* =========================================================
-   HELPERS
+CONFIGURATION
 ========================================================= */
 
-function normalizeEmail(email) {
-  return String(email || '')
-    .trim()
-    .toLowerCase();
+const FRONTEND_URL =
+process.env.FRONTEND_URL ||
+'https://sellflowic.netlify.app';
+
+const BACKEND_URL =
+process.env.BACKEND_URL ||
+'https://sellflow-backend.onrender.com';
+
+const JWT_SECRET =
+process.env.JWT_SECRET ||
+process.env.SECRET_KEY ||
+'sellflow-change-this-secret-in-render';
+
+const JWT_EXPIRES_IN =
+process.env.JWT_EXPIRES_IN ||
+'30d';
+
+/* =========================================================
+UTILITAIRES
+========================================================= */
+
+function normalizeEmail(value) {
+return String(value || '')
+.trim()
+.toLowerCase();
 }
 
-function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-    email
-  );
+function cleanString(value, maxLength = 500) {
+return String(value || '')
+.trim()
+.slice(0, maxLength);
+}
+
+function normalizePhone(value) {
+return String(value || '')
+.trim()
+.replace(/[^\d+]/g, '')
+.slice(0, 30);
 }
 
 function publicUser(user) {
-  if (!user) {
-    return null;
-  }
+if (!user) return null;
 
-  return {
-    id: user.id,
-    name: user.name || '',
-    email: normalizeEmail(user.email),
-    phone: user.phone || null,
-    country: user.country || null,
-    plan: user.plan || 'free',
-    email_verified:
-      user.email_verified !== false,
-    subscription_status:
-      user.subscription_status || null,
-    subscription_started_at:
-      user.subscription_started_at || null,
-    subscription_expires_at:
-      user.subscription_expires_at || null,
-    created_at:
-      user.created_at || null,
-    updated_at:
-      user.updated_at || null
-  };
+return {
+id: user.id,
+name: user.name || '',
+email: user.email || '',
+phone: user.phone || '',
+country: user.country || '',
+dial_code: user.dial_code || '',
+phone_international:
+user.phone_international ||
+user.phone ||
+'',
+plan:
+user.plan ||
+user.subscription_plan ||
+'starter',
+billing:
+user.billing ||
+user.subscription_billing ||
+'monthly',
+subscription_status:
+user.subscription_status ||
+user.status ||
+'active',
+auth_provider:
+user.auth_provider ||
+'password',
+created_at:
+user.created_at ||
+null,
+updated_at:
+user.updated_at ||
+null
+};
+}
+
+function createToken(user) {
+return jwt.sign(
+{
+sub: String(user.id),
+id: String(user.id),
+email: user.email,
+name: user.name || ''
+},
+JWT_SECRET,
+{
+expiresIn: JWT_EXPIRES_IN
+}
+);
+}
+
+function getBearerToken(req) {
+const header = req.headers.authorization || '';
+
+if (!header.startsWith('Bearer ')) {
+return '';
+}
+
+return header.slice(7).trim();
+}
+
+function generateId() {
+if (typeof crypto.randomUUID === 'function') {
+return crypto.randomUUID();
+}
+
+return crypto.randomBytes(16).toString('hex');
+}
+
+/* =========================================================
+DATABASE
+========================================================= */
+
+async function getUsersColumns() {
+const pool = getPool();
+
+const result = await pool.query(
+`       SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'users'
+      ORDER BY ordinal_position
+    `
+);
+
+return new Set(
+result.rows.map(
+(row) => row.column_name
+)
+);
+}
+
+function quoteIdentifier(value) {
+return `"${String(value).replace(/"/g, '""')}"`;
 }
 
 async function findUserByEmail(email) {
-  const normalizedEmail =
-    normalizeEmail(email);
+const pool = getPool();
 
-  if (!normalizedEmail) {
-    return null;
-  }
+const result = await pool.query(
+`       SELECT *
+      FROM users
+      WHERE LOWER(email) = LOWER($1)
+      LIMIT 1
+    `,
+[email]
+);
 
-  const result = await pool.query(
-    'SELECT * FROM users ' +
-      'WHERE LOWER(TRIM(email)) = $1 ' +
-      'LIMIT 1',
-    [normalizedEmail]
-  );
-
-  return result.rows[0] || null;
+return result.rows[0] || null;
 }
 
-function emailAlreadyExistsResponse(res) {
+async function findUserById(id) {
+const pool = getPool();
+
+const result = await pool.query(
+`       SELECT *
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+    `,
+[id]
+);
+
+return result.rows[0] || null;
+}
+
+/* =========================================================
+CRÉATION UTILISATEUR
+========================================================= */
+
+async function createUser({
+name,
+email,
+passwordHash = null,
+phone = '',
+country = '',
+dialCode = '',
+phoneInternational = '',
+googleId = null,
+authProvider = 'password',
+plan = 'starter',
+billing = 'monthly',
+subscriptionStatus = 'active'
+}) {
+const pool = getPool();
+
+const columnsAvailable =
+await getUsersColumns();
+
+const values = [];
+const columns = [];
+const placeholders = [];
+
+function addColumn(column, value) {
+if (!columnsAvailable.has(column)) {
+return;
+}
+
+```
+columns.push(column);
+values.push(value);
+placeholders.push(`$${values.length}`);
+```
+
+}
+
+addColumn('id', generateId());
+
+addColumn('name', name);
+
+addColumn('email', email);
+
+if (passwordHash) {
+if (columnsAvailable.has('password_hash')) {
+addColumn(
+'password_hash',
+passwordHash
+);
+} else if (
+columnsAvailable.has('passwordHash')
+) {
+addColumn(
+'passwordHash',
+passwordHash
+);
+}
+}
+
+addColumn('phone', phone);
+
+addColumn('country', country);
+
+addColumn('dial_code', dialCode);
+
+addColumn(
+'phone_international',
+phoneInternational
+);
+
+addColumn('google_id', googleId);
+
+addColumn(
+'auth_provider',
+authProvider
+);
+
+addColumn('plan', plan);
+
+addColumn('billing', billing);
+
+addColumn(
+'subscription_status',
+subscriptionStatus
+);
+
+const now = new Date();
+
+addColumn('created_at', now);
+
+addColumn('updated_at', now);
+
+if (!columns.length) {
+throw new Error(
+'Aucune colonne exploitable trouvée dans la table users.'
+);
+}
+
+const query = `     INSERT INTO users (
+      ${columns.map(quoteIdentifier).join(', ')}
+    )
+    VALUES (
+      ${placeholders.join(', ')}
+    )
+    RETURNING *
+  `;
+
+const result = await pool.query(
+query,
+values
+);
+
+return result.rows[0];
+}
+
+/* =========================================================
+MISE À JOUR GOOGLE
+========================================================= */
+
+async function updateGoogleIdentity(
+userId,
+googleId
+) {
+const pool = getPool();
+
+const columnsAvailable =
+await getUsersColumns();
+
+const sets = [];
+const values = [
+googleId,
+userId
+];
+
+if (
+columnsAvailable.has('google_id')
+) {
+sets.push('google_id = $1');
+}
+
+if (
+columnsAvailable.has('auth_provider')
+) {
+sets.push(
+"auth_provider = 'google'"
+);
+}
+
+if (
+columnsAvailable.has('updated_at')
+) {
+sets.push(
+'updated_at = NOW()'
+);
+}
+
+if (!sets.length) {
+return;
+}
+
+await pool.query(
+`       UPDATE users
+      SET ${sets.join(', ')}
+      WHERE id = $2
+    `,
+values
+);
+}
+
+/* =========================================================
+MISE À JOUR PROFIL
+========================================================= */
+
+async function updateGoogleProfile(
+userId,
+googleProfile
+) {
+const pool = getPool();
+
+const columnsAvailable =
+await getUsersColumns();
+
+const sets = [];
+const values = [];
+let index = 1;
+
+function setIfExists(
+column,
+value
+) {
+if (
+!columnsAvailable.has(column)
+) {
+return;
+}
+
+```
+sets.push(
+  `${quoteIdentifier(column)} = $${index}`
+);
+
+values.push(value);
+index += 1;
+```
+
+}
+
+setIfExists(
+'name',
+googleProfile.name
+);
+
+setIfExists(
+'google_id',
+googleProfile.googleId
+);
+
+setIfExists(
+'auth_provider',
+'google'
+);
+
+if (
+columnsAvailable.has('updated_at')
+) {
+sets.push(
+'"updated_at" = NOW()'
+);
+}
+
+if (!sets.length) {
+return;
+}
+
+values.push(userId);
+
+await pool.query(
+`       UPDATE users
+      SET ${sets.join(', ')}
+      WHERE id = $${values.length}
+    `,
+values
+);
+}
+
+/* =========================================================
+VALIDATION INSCRIPTION
+========================================================= */
+
+function validateRegistration(body) {
+const name = cleanString(
+body.name,
+150
+);
+
+const email =
+normalizeEmail(body.email);
+
+const password =
+String(body.password || '');
+
+const passwordConfirmation =
+String(
+body.password_confirmation ||
+body.passwordConfirmation ||
+''
+);
+
+const country = cleanString(
+body.country,
+100
+);
+
+const dialCode =
+cleanString(
+body.dial_code ||
+body.dialCode ||
+'',
+10
+);
+
+const rawPhone =
+body.phone ||
+body.phone_number ||
+'';
+
+const phone =
+normalizePhone(rawPhone);
+
+const phoneInternational =
+normalizePhone(
+body.phone_international ||
+body.phoneInternational ||
+(
+dialCode &&
+phone &&
+!phone.startsWith('+')
+? `${dialCode}${phone}`
+: phone
+)
+);
+
+if (!name) {
+throw new Error(
+'Le nom est obligatoire.'
+);
+}
+
+if (!email) {
+throw new Error(
+'L’adresse e-mail est obligatoire.'
+);
+}
+
+if (
+!/^[^\s@]+@[^\s@]+.[^\s@]+$/.test(
+email
+)
+) {
+throw new Error(
+'Adresse e-mail invalide.'
+);
+}
+
+if (password.length < 8) {
+throw new Error(
+'Le mot de passe doit contenir au moins 8 caractères.'
+);
+}
+
+if (
+passwordConfirmation &&
+password !== passwordConfirmation
+) {
+throw new Error(
+'Les mots de passe ne correspondent pas.'
+);
+}
+
+return {
+name,
+email,
+password,
+passwordConfirmation,
+country,
+dialCode,
+phone,
+phoneInternational
+};
+}
+
+/* =========================================================
+INSCRIPTION DIRECTE
+========================================================= */
+
+async function registerAccount(req, res) {
+try {
+const data =
+validateRegistration(req.body);
+
+```
+/* -----------------------------------------
+   EMAIL UNIQUE
+----------------------------------------- */
+
+const existingUser =
+  await findUserByEmail(
+    data.email
+  );
+
+if (existingUser) {
   return res.status(409).json({
     ok: false,
-    code: 'EMAIL_ALREADY_EXISTS',
+    error: 'EMAIL_ALREADY_EXISTS',
     message:
-      'Cette adresse e-mail est déjà utilisée. Connectez-vous à votre compte ou utilisez une autre adresse.'
+      'Cette adresse e-mail possède déjà un compte. Connecte-toi avec ce compte.'
   });
 }
 
-function getRegistrationData(body) {
-  body = body || {};
+/* -----------------------------------------
+   HASH MOT DE PASSE
+----------------------------------------- */
 
-  const password =
-    String(body.password || '');
-
-  return {
-    name:
-      String(body.name || '').trim(),
-
-    email:
-      normalizeEmail(body.email),
-
-    phone:
-      String(body.phone || '').trim(),
-
-    country:
-      String(body.country || '').trim(),
-
-    password,
-
-    password2:
-      body.password2 === undefined ||
-      body.password2 === null
-        ? password
-        : String(body.password2)
-  };
-}
-
-function validateRegistrationData(data) {
-  if (!data.name) {
-    return 'Le nom est obligatoire.';
-  }
-
-  if (
-    !data.email ||
-    !isValidEmail(data.email)
-  ) {
-    return (
-      'Veuillez fournir une adresse e-mail valide.'
-    );
-  }
-
-  if (
-    data.password.length < 6
-  ) {
-    return (
-      'Le mot de passe doit contenir au moins 6 caractères.'
-    );
-  }
-
-  if (
-    data.password !==
-    data.password2
-  ) {
-    return (
-      'Les mots de passe ne correspondent pas.'
-    );
-  }
-
-  return null;
-}
-
-async function createUser({
-  name,
-  email,
-  phone,
-  country,
-  passwordHash,
-  plan = 'free'
-}) {
-  const result = await pool.query(
-    'INSERT INTO users ' +
-      '(id, name, email, phone, country, password_hash, email_verified, plan) ' +
-      'VALUES ' +
-      '(gen_random_uuid(), $1, $2, $3, $4, $5, TRUE, $6) ' +
-      'RETURNING *',
-    [
-      String(name || '').trim(),
-      normalizeEmail(email),
-      phone
-        ? String(phone).trim()
-        : null,
-      country
-        ? String(country).trim()
-        : null,
-      passwordHash,
-      plan
-    ]
+const passwordHash =
+  await bcrypt.hash(
+    data.password,
+    12
   );
 
-  return result.rows[0];
-}
+/* -----------------------------------------
+   CRÉATION
+----------------------------------------- */
 
-function createGoogleClient() {
-  if (
-    !GOOGLE_CLIENT_ID ||
-    !GOOGLE_CLIENT_SECRET
-  ) {
-    return null;
-  }
+const user =
+  await createUser({
+    name: data.name,
+    email: data.email,
+    passwordHash,
+    phone: data.phone,
+    country: data.country,
+    dialCode: data.dialCode,
+    phoneInternational:
+      data.phoneInternational,
+    authProvider: 'password',
+    plan: 'starter',
+    billing: 'monthly',
+    subscriptionStatus: 'active'
+  });
 
-  return new google.auth.OAuth2(
-    GOOGLE_CLIENT_ID,
-    GOOGLE_CLIENT_SECRET,
-    GOOGLE_REDIRECT_URI
-  );
-}
+const token =
+  createToken(user);
 
-/* =========================================================
-   INSCRIPTION
-========================================================= */
+return res.status(201).json({
+  ok: true,
+  message:
+    'Compte créé avec succès.',
+  token,
+  accessToken: token,
+  user: publicUser(user)
+});
+```
 
-async function registerHandler(
-  req,
-  res
+} catch (error) {
+console.error(
+'❌ Erreur inscription:',
+error
+);
+
+```
+/* -----------------------------------------
+   EMAIL UNIQUE POSTGRESQL
+----------------------------------------- */
+
+if (
+  error &&
+  error.code === '23505'
 ) {
-  try {
-    const data =
-      getRegistrationData(
-        req.body
-      );
-
-    const validationError =
-      validateRegistrationData(
-        data
-      );
-
-    if (validationError) {
-      return res.status(400).json({
-        ok: false,
-        message: validationError
-      });
-    }
-
-    /*
-     * Une adresse e-mail ne peut
-     * appartenir qu'à un seul compte.
-     */
-    const existingUser =
-      await findUserByEmail(
-        data.email
-      );
-
-    if (existingUser) {
-      return emailAlreadyExistsResponse(
-        res
-      );
-    }
-
-    const passwordHash =
-      await hashPassword(
-        data.password
-      );
-
-    let user;
-
-    try {
-      user = await createUser({
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        country: data.country,
-        passwordHash,
-        plan: 'free'
-      });
-    } catch (error) {
-      /*
-       * PostgreSQL 23505 = doublon.
-       */
-      if (
-        error &&
-        error.code === '23505'
-      ) {
-        return emailAlreadyExistsResponse(
-          res
-        );
-      }
-
-      throw error;
-    }
-
-    const token =
-      signToken(user);
-
-    return res.status(201).json({
-      ok: true,
-      created: true,
-      verified: true,
-      message:
-        'Compte créé avec succès.',
-      token,
-      user:
-        publicUser(user)
-    });
-  } catch (error) {
-    console.error(
-      '❌ Erreur inscription:',
-      error
-    );
-
-    return res.status(500).json({
-      ok: false,
-      error: 'REGISTER_ERROR',
-      message:
-        'Impossible de créer le compte.'
-    });
-  }
+  return res.status(409).json({
+    ok: false,
+    error: 'EMAIL_ALREADY_EXISTS',
+    message:
+      'Cette adresse e-mail possède déjà un compte.'
+  });
 }
 
-router.post(
-  '/register',
-  registerHandler
-);
+return res.status(400).json({
+  ok: false,
+  error:
+    error.message ||
+    'Impossible de créer le compte.'
+});
+```
 
-router.post(
-  '/register/complete',
-  registerHandler
-);
+}
+}
 
 /* =========================================================
-   CONNEXION
+POST /AUTH/REGISTER
 ========================================================= */
 
 router.post(
-  '/login',
-  async function (req, res) {
-    try {
-      const email =
-        normalizeEmail(
-          req.body &&
-          req.body.email
-        );
-
-      const password =
-        String(
-          (
-            req.body &&
-            req.body.password
-          ) || ''
-        );
-
-      if (
-        !email ||
-        !isValidEmail(email)
-      ) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            'Veuillez fournir une adresse e-mail valide.'
-        });
-      }
-
-      if (!password) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            'Le mot de passe est obligatoire.'
-        });
-      }
-
-      const user =
-        await findUserByEmail(
-          email
-        );
-
-      if (!user) {
-        return res.status(401).json({
-          ok: false,
-          code:
-            'INVALID_CREDENTIALS',
-          message:
-            'E-mail ou mot de passe incorrect.'
-        });
-      }
-
-      if (!user.password_hash) {
-        return res.status(401).json({
-          ok: false,
-          code:
-            'GOOGLE_ACCOUNT',
-          message:
-            'Ce compte utilise Google. Connectez-vous avec Google.'
-        });
-      }
-
-      const validPassword =
-        await comparePassword(
-          password,
-          user.password_hash
-        );
-
-      if (!validPassword) {
-        return res.status(401).json({
-          ok: false,
-          code:
-            'INVALID_CREDENTIALS',
-          message:
-            'E-mail ou mot de passe incorrect.'
-        });
-      }
-
-      const token =
-        signToken(user);
-
-      return res.json({
-        ok: true,
-        message:
-          'Connexion réussie.',
-        token,
-        user:
-          publicUser(user)
-      });
-    } catch (error) {
-      console.error(
-        '❌ Erreur connexion:',
-        error
-      );
-
-      return res.status(500).json({
-        ok: false,
-        error:
-          'LOGIN_ERROR',
-        message:
-          'Impossible de se connecter.'
-      });
-    }
-  }
+'/register',
+registerAccount
 );
 
 /* =========================================================
-   UTILISATEUR CONNECTÉ
-========================================================= */
-
-router.get(
-  '/me',
-  authMiddleware,
-  async function (req, res) {
-    try {
-      const userId =
-        req.user &&
-        (
-          req.user.id ||
-          req.user.userId ||
-          req.user.sub
-        );
-
-      if (!userId) {
-        return res.status(401).json({
-          ok: false,
-          message:
-            'Utilisateur non authentifié.'
-        });
-      }
-
-      const result =
-        await pool.query(
-          'SELECT * FROM users ' +
-            'WHERE id = $1 ' +
-            'LIMIT 1',
-          [userId]
-        );
-
-      if (
-        result.rows.length === 0
-      ) {
-        return res.status(404).json({
-          ok: false,
-          message:
-            'Compte introuvable.'
-        });
-      }
-
-      return res.json({
-        ok: true,
-        user:
-          publicUser(
-            result.rows[0]
-          )
-      });
-    } catch (error) {
-      console.error(
-        '❌ Erreur /me:',
-        error
-      );
-
-      return res.status(500).json({
-        ok: false,
-        error:
-          'ME_ERROR',
-        message:
-          'Impossible de récupérer le compte.'
-      });
-    }
-  }
-);
-
-/* =========================================================
-   CHANGEMENT DE MOT DE PASSE
+POST /AUTH/REGISTER/COMPLETE
+Compatibilité avec anciennes versions
 ========================================================= */
 
 router.post(
-  '/change-password',
-  authMiddleware,
-  async function (req, res) {
-    try {
-      const userId =
-        req.user &&
-        (
-          req.user.id ||
-          req.user.userId ||
-          req.user.sub
-        );
-
-      const currentPassword =
-        String(
-          (
-            req.body &&
-            req.body.currentPassword
-          ) || ''
-        );
-
-      const newPassword =
-        String(
-          (
-            req.body &&
-            req.body.newPassword
-          ) || ''
-        );
-
-      if (!userId) {
-        return res.status(401).json({
-          ok: false,
-          message:
-            'Utilisateur non authentifié.'
-        });
-      }
-
-      if (
-        !currentPassword ||
-        !newPassword
-      ) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            'Ancien et nouveau mot de passe obligatoires.'
-        });
-      }
-
-      if (
-        newPassword.length < 6
-      ) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            'Le nouveau mot de passe doit contenir au moins 6 caractères.'
-        });
-      }
-
-      const result =
-        await pool.query(
-          'SELECT * FROM users ' +
-            'WHERE id = $1 ' +
-            'LIMIT 1',
-          [userId]
-        );
-
-      if (
-        result.rows.length === 0
-      ) {
-        return res.status(404).json({
-          ok: false,
-          message:
-            'Compte introuvable.'
-        });
-      }
-
-      const user =
-        result.rows[0];
-
-      if (
-        !user.password_hash
-      ) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            'Ce compte Google ne possède pas de mot de passe local.'
-        });
-      }
-
-      const valid =
-        await comparePassword(
-          currentPassword,
-          user.password_hash
-        );
-
-      if (!valid) {
-        return res.status(401).json({
-          ok: false,
-          message:
-            'Ancien mot de passe incorrect.'
-        });
-      }
-
-      const newPasswordHash =
-        await hashPassword(
-          newPassword
-        );
-
-      await pool.query(
-        'UPDATE users ' +
-          'SET password_hash = $1, updated_at = NOW() ' +
-          'WHERE id = $2',
-        [
-          newPasswordHash,
-          userId
-        ]
-      );
-
-      return res.json({
-        ok: true,
-        message:
-          'Mot de passe modifié avec succès.'
-      });
-    } catch (error) {
-      console.error(
-        '❌ Erreur changement mot de passe:',
-        error
-      );
-
-      return res.status(500).json({
-        ok: false,
-        error:
-          'CHANGE_PASSWORD_ERROR',
-        message:
-          'Impossible de modifier le mot de passe.'
-      });
-    }
-  }
+'/register/complete',
+registerAccount
 );
 
 /* =========================================================
-   GOOGLE / GMAIL
+POST /AUTH/LOGIN
 ========================================================= */
 
-router.get(
-  '/gmail/connect',
-  function (req, res) {
-    try {
-      const client =
-        createGoogleClient();
-
-      if (!client) {
-        return res.status(500).json({
-          ok: false,
-          code:
-            'GOOGLE_NOT_CONFIGURED',
-          message:
-            'La connexion Google n’est pas configurée sur le backend.'
-        });
-      }
-
-      const url =
-        client.generateAuthUrl({
-          access_type: 'offline',
-          prompt: 'select_account',
-          scope: [
-            'openid',
-            'profile',
-            'email'
-          ]
-        });
-
-      return res.redirect(url);
-    } catch (error) {
-      console.error(
-        '❌ Erreur Google connect:',
-        error
-      );
-
-      return res.status(500).json({
-        ok: false,
-        error:
-          'GOOGLE_CONNECT_ERROR',
-        message:
-          'Impossible de démarrer la connexion Google.'
-      });
-    }
-  }
+router.post(
+'/login',
+async (req, res) => {
+try {
+const email =
+normalizeEmail(
+req.body.email
 );
 
-/* =========================================================
-   GOOGLE CALLBACK
-========================================================= */
+```
+  const password =
+    String(
+      req.body.password || ''
+    );
 
-router.get(
-  '/gmail/callback',
-  async function (req, res) {
-    try {
-      const code =
-        String(
-          (
-            req.query &&
-            req.query.code
-          ) || ''
-        ).trim();
-
-      if (!code) {
-        return res.redirect(
-          FRONTEND_URL +
-            '/#google-auth-error'
-        );
-      }
-
-      const client =
-        createGoogleClient();
-
-      if (!client) {
-        return res.redirect(
-          FRONTEND_URL +
-            '/#google-auth-error'
-        );
-      }
-
-      const tokenResponse =
-        await client.getToken(
-          code
-        );
-
-      client.setCredentials(
-        tokenResponse.tokens
-      );
-
-      const oauth2 =
-        google.oauth2({
-          auth: client,
-          version: 'v2'
-        });
-
-      const userInfoResponse =
-        await oauth2.userinfo.get();
-
-      const googleUser =
-        userInfoResponse.data ||
-        {};
-
-      const googleEmail =
-        normalizeEmail(
-          googleUser.email
-        );
-
-      if (
-        !googleEmail ||
-        !isValidEmail(
-          googleEmail
-        )
-      ) {
-        return res.redirect(
-          FRONTEND_URL +
-            '/#google-auth-error'
-        );
-      }
-
-      /*
-       * IMPORTANT :
-       * On recherche d'abord
-       * l'e-mail existant.
-       *
-       * Un e-mail = un compte.
-       */
-      let user =
-        await findUserByEmail(
-          googleEmail
-        );
-
-      if (user) {
-        console.log(
-          '✅ Google : compte existant réutilisé.'
-        );
-      } else {
-        /*
-         * Nouveau compte Google.
-         */
-        const randomPassword =
-          crypto.randomBytes(
-            32
-          ).toString('hex');
-
-        const passwordHash =
-          await hashPassword(
-            randomPassword
-          );
-
-        try {
-          user =
-            await createUser({
-              name:
-                String(
-                  googleUser.name ||
-                  googleUser.given_name ||
-                  'Utilisateur SellFlow'
-                ).trim(),
-
-              email:
-                googleEmail,
-
-              phone:
-                null,
-
-              country:
-                null,
-
-              passwordHash:
-                passwordHash,
-
-              plan:
-                'free'
-            });
-
-          console.log(
-            '✅ Google : nouveau compte créé.'
-          );
-        } catch (error) {
-          /*
-           * Un autre processus a pu
-           * créer le même e-mail.
-           */
-          if (
-            error &&
-            error.code === '23505'
-          ) {
-            user =
-              await findUserByEmail(
-                googleEmail
-              );
-          } else {
-            throw error;
-          }
-        }
-      }
-
-      if (!user) {
-        return res.redirect(
-          FRONTEND_URL +
-            '/#google-auth-error'
-        );
-      }
-
-      const token =
-        signToken(user);
-
-      return res.redirect(
-        FRONTEND_URL +
-          '/#google-auth-success?token=' +
-          encodeURIComponent(token)
-      );
-    } catch (error) {
-      console.error(
-        '❌ Erreur Google callback:',
-        error
-      );
-
-      return res.redirect(
-        FRONTEND_URL +
-          '/#google-auth-error'
-      );
-    }
-  }
-);
-
-/* =========================================================
-   STATUS
-========================================================= */
-
-router.get(
-  '/status',
-  function (req, res) {
-    return res.json({
-      ok: true,
-
-      service:
-        'SellFlow authentication',
-
-      emailVerification:
-        'disabled',
-
-      uniqueEmail:
-        'enabled',
-
-      googleAuth:
-        GOOGLE_CLIENT_ID &&
-        GOOGLE_CLIENT_SECRET
-          ? 'configured'
-          : 'not-configured',
-
-      resend:
-        'disabled'
+  if (!email || !password) {
+    return res.status(400).json({
+      ok: false,
+      error: 'MISSING_CREDENTIALS',
+      message:
+        'E-mail et mot de passe obligatoires.'
     });
   }
+
+  const user =
+    await findUserByEmail(
+      email
+    );
+
+  if (!user) {
+    return res.status(401).json({
+      ok: false,
+      error: 'INVALID_CREDENTIALS',
+      message:
+        'E-mail ou mot de passe incorrect.'
+    });
+  }
+
+  const storedHash =
+    user.password_hash ||
+    user.passwordHash ||
+    user.password ||
+    '';
+
+  if (!storedHash) {
+    return res.status(401).json({
+      ok: false,
+      error: 'PASSWORD_LOGIN_UNAVAILABLE',
+      message:
+        'Ce compte utilise une autre méthode de connexion.'
+    });
+  }
+
+  const validPassword =
+    await bcrypt.compare(
+      password,
+      storedHash
+    );
+
+  if (!validPassword) {
+    return res.status(401).json({
+      ok: false,
+      error: 'INVALID_CREDENTIALS',
+      message:
+        'E-mail ou mot de passe incorrect.'
+    });
+  }
+
+  const token =
+    createToken(user);
+
+  return res.json({
+    ok: true,
+    message: 'Connexion réussie.',
+    token,
+    accessToken: token,
+    user: publicUser(user)
+  });
+} catch (error) {
+  console.error(
+    '❌ Erreur connexion:',
+    error
+  );
+
+  return res.status(500).json({
+    ok: false,
+    error: 'LOGIN_ERROR',
+    message:
+      'Impossible de se connecter.'
+  });
+}
+```
+
+}
 );
 
 /* =========================================================
-   EXPORT
+GET /AUTH/ME
+========================================================= */
+
+router.get(
+'/me',
+async (req, res) => {
+try {
+const token =
+getBearerToken(req);
+
+```
+  if (!token) {
+    return res.status(401).json({
+      ok: false,
+      error: 'MISSING_TOKEN',
+      message:
+        'Token d’authentification manquant.'
+    });
+  }
+
+  const payload =
+    jwt.verify(
+      token,
+      JWT_SECRET
+    );
+
+  const user =
+    await findUserById(
+      payload.id ||
+      payload.sub
+    );
+
+  if (!user) {
+    return res.status(404).json({
+      ok: false,
+      error: 'USER_NOT_FOUND',
+      message:
+        'Utilisateur introuvable.'
+    });
+  }
+
+  return res.json({
+    ok: true,
+    user: publicUser(user)
+  });
+} catch (error) {
+  console.error(
+    '❌ /auth/me:',
+    error
+  );
+
+  return res.status(401).json({
+    ok: false,
+    error: 'INVALID_TOKEN',
+    message:
+      'Session invalide ou expirée.'
+  });
+}
+```
+
+}
+);
+
+/* =========================================================
+GOOGLE OAUTH
+========================================================= */
+
+function getGoogleClient() {
+const clientId =
+process.env.GOOGLE_CLIENT_ID;
+
+const clientSecret =
+process.env.GOOGLE_CLIENT_SECRET;
+
+const redirectUri =
+process.env.GOOGLE_REDIRECT_URI ||
+`${BACKEND_URL}/auth/google/callback`;
+
+if (
+!clientId ||
+!clientSecret
+) {
+throw new Error(
+'GOOGLE_CLIENT_ID ou GOOGLE_CLIENT_SECRET manquant.'
+);
+}
+
+return new google.auth.OAuth2(
+clientId,
+clientSecret,
+redirectUri
+);
+}
+
+/* =========================================================
+GET /AUTH/GOOGLE
+========================================================= */
+
+router.get(
+'/google',
+async (req, res) => {
+try {
+const oauth2Client =
+getGoogleClient();
+
+```
+  const url =
+    oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      prompt: 'select_account',
+      scope: [
+        'openid',
+        'email',
+        'profile'
+      ]
+    });
+
+  return res.redirect(
+    url
+  );
+} catch (error) {
+  console.error(
+    '❌ Google OAuth:',
+    error
+  );
+
+  return res.status(500).json({
+    ok: false,
+    error: 'GOOGLE_CONFIG_ERROR',
+    message:
+      error.message
+  });
+}
+```
+
+}
+);
+
+/* =========================================================
+GET /AUTH/GOOGLE/CALLBACK
+========================================================= */
+
+router.get(
+'/google/callback',
+async (req, res) => {
+try {
+const code =
+cleanString(
+req.query.code
+);
+
+```
+  if (!code) {
+    return res.redirect(
+      `${FRONTEND_URL}/?google_error=missing_code`
+    );
+  }
+
+  const oauth2Client =
+    getGoogleClient();
+
+  const {
+    tokens
+  } =
+    await oauth2Client.getToken(
+      code
+    );
+
+  oauth2Client.setCredentials(
+    tokens
+  );
+
+  const oauth2 =
+    google.oauth2({
+      auth:
+        oauth2Client,
+      version: 'v2'
+    });
+
+  const {
+    data
+  } =
+    await oauth2.userinfo.get();
+
+  const googleId =
+    cleanString(
+      data.id,
+      300
+    );
+
+  const email =
+    normalizeEmail(
+      data.email
+    );
+
+  const name =
+    cleanString(
+      data.name ||
+      data.given_name ||
+      'Utilisateur Google',
+      150
+    );
+
+  if (
+    !googleId ||
+    !email
+  ) {
+    return res.redirect(
+      `${FRONTEND_URL}/?google_error=incomplete_profile`
+    );
+  }
+
+  /* -----------------------------------------
+     UN SEUL COMPTE PAR EMAIL
+  ----------------------------------------- */
+
+  let user =
+    await findUserByEmail(
+      email
+    );
+
+  if (user) {
+    await updateGoogleIdentity(
+      user.id,
+      googleId
+    );
+
+    await updateGoogleProfile(
+      user.id,
+      {
+        name:
+          user.name || name,
+        googleId
+      }
+    );
+
+    user =
+      await findUserById(
+        user.id
+      );
+  } else {
+    user =
+      await createUser({
+        name,
+        email,
+        passwordHash: null,
+        phone: '',
+        country: '',
+        dialCode: '',
+        phoneInternational: '',
+        googleId,
+        authProvider: 'google',
+        plan: 'starter',
+        billing: 'monthly',
+        subscriptionStatus: 'active'
+      });
+  }
+
+  const token =
+    createToken(user);
+
+  const userJson =
+    encodeURIComponent(
+      JSON.stringify(
+        publicUser(user)
+      )
+    );
+
+  return res.redirect(
+    `${FRONTEND_URL}/?google_auth=success&token=${encodeURIComponent(token)}&user=${userJson}`
+  );
+} catch (error) {
+  console.error(
+    '❌ Google callback:',
+    error
+  );
+
+  return res.redirect(
+    `${FRONTEND_URL}/?google_error=callback_failed`
+  );
+}
+```
+
+}
+);
+
+/* =========================================================
+ROUTES D'ANCIEN SYSTÈME EMAIL
+SUPPRIMÉES INTENTIONNELLEMENT
+========================================================= */
+
+/*
+Aucun :
+/register/request-email-code
+/register/verify-email-code
+/register/resend-email-code
+/verify-email
+/test-email
+
+Pas de Resend.
+Pas de code envoyé par e-mail.
+*/
+
+/* =========================================================
+EXPORT
 ========================================================= */
 
 module.exports = router;
