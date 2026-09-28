@@ -12,13 +12,13 @@ const paymentsRoutes = require('./routes/payments');
 const webhooksRoutes = require('./routes/webhooks');
 
 /* =========================================================
-CONFIGURATION
+APP
 ========================================================= */
 
 const app = express();
 
 const PORT = Number(process.env.PORT) || 4000;
-const API_VERSION = '2.3.4';
+const API_VERSION = '2.3.5';
 
 /* =========================================================
 SUBSCRIPTIONS
@@ -59,9 +59,18 @@ console.log(
 CORS
 ========================================================= */
 
+/*
+
+* IMPORTANT :
+* On normalise toutes les origines avant comparaison.
+  */
+
 const allowedOrigins = [
 'https://sellflowic.netlify.app',
+'https://www.sellflowic.netlify.app',
+
 'https://sellflowme.netlify.app',
+'https://www.sellflowme.netlify.app',
 
 'http://localhost:3000',
 'http://localhost:5173',
@@ -71,97 +80,162 @@ const allowedOrigins = [
 ];
 
 if (process.env.FRONTEND_URL) {
-const frontendUrl = process.env.FRONTEND_URL
+const frontendUrl =
+process.env.FRONTEND_URL
 .trim()
 .replace(//+$/, '');
 
-if (
-frontendUrl &&
-!allowedOrigins.includes(frontendUrl)
-) {
+if (frontendUrl) {
 allowedOrigins.push(frontendUrl);
 }
 }
 
-const uniqueAllowedOrigins = [
+const normalizedAllowedOrigins = [
 ...new Set(
 allowedOrigins
 .filter(Boolean)
-.map((origin) =>
-origin
+.map(function (origin) {
+return origin
 .trim()
 .replace(//+$/, '')
-)
+.toLowerCase();
+})
 )
 ];
 
 console.log(
-'🌐 CORS:',
-uniqueAllowedOrigins
+'🌐 Origines CORS autorisées:',
+normalizedAllowedOrigins
 );
+
+/* =========================================================
+FONCTION CORS
+========================================================= */
+
+function isAllowedOrigin(origin) {
+
+/*
+
+* Les requêtes sans Origin sont normales :
+* Render, curl, Postman, monitoring, etc.
+  */
+
+if (!origin) {
+return true;
+}
+
+const normalizedOrigin =
+origin
+.trim()
+.replace(//+$/, '')
+.toLowerCase();
+
+/*
+
+* Origines explicitement autorisées.
+  */
+
+if (
+normalizedAllowedOrigins.includes(
+normalizedOrigin
+)
+) {
+return true;
+}
+
+/*
+
+* Autoriser les déploiements Netlify
+* liés au projet SellFlow.
+*
+* Exemple :
+* https://xxxxx--sellflowic.netlify.app
+  */
+
+try {
+
+```
+const url =
+  new URL(normalizedOrigin);
+
+if (
+  url.protocol === 'https:' &&
+  url.hostname.endsWith('.netlify.app')
+) {
+
+  /*
+   * Autoriser uniquement les sous-domaines
+   * contenant SellFlow.
+   */
+
+  const hostname =
+    url.hostname.toLowerCase();
+
+  if (
+    hostname.includes('sellflowic') ||
+    hostname.includes('sellflowme')
+  ) {
+    return true;
+  }
+}
+```
+
+} catch (error) {
+return false;
+}
+
+/*
+
+* Développement local.
+  */
+
+if (
+normalizedOrigin.startsWith(
+'http://localhost:'
+) ||
+normalizedOrigin.startsWith(
+'http://127.0.0.1:'
+)
+) {
+return true;
+}
+
+return false;
+}
 
 /* =========================================================
 CORS OPTIONS
 ========================================================= */
 
 const corsOptions = {
-origin(origin, callback) {
+
+origin: function (origin, callback) {
 
 ```
-/*
- * Requêtes sans Origin :
- * Render, curl, Postman, etc.
- */
-
-if (!origin) {
-  return callback(null, true);
-}
-
-const normalizedOrigin = origin
-  .trim()
-  .replace(/\/+$/, '');
-
-/*
- * Développement local
- */
-
 if (
-  process.env.NODE_ENV !== 'production' &&
-  (
-    normalizedOrigin.startsWith(
-      'http://localhost:'
-    ) ||
-    normalizedOrigin.startsWith(
-      'http://127.0.0.1:'
-    )
-  )
+  isAllowedOrigin(origin)
 ) {
   return callback(null, true);
 }
 
 /*
- * Production
+ * On log l'origine exacte pour pouvoir
+ * l'ajouter facilement si nécessaire.
  */
-
-if (
-  uniqueAllowedOrigins.includes(
-    normalizedOrigin
-  )
-) {
-  return callback(null, true);
-}
 
 console.warn(
-  '⚠️ Origine CORS refusée:',
-  origin
+  '⚠️ Origine CORS non reconnue:',
+  origin || 'Aucune origine'
 );
 
-return callback(
-  new Error(
-    'Origine CORS non autorisée: ' +
-    origin
-  )
-);
+/*
+ * IMPORTANT :
+ * On ne déclenche pas d'exception ici.
+ * Cela évite que le middleware transforme
+ * la requête en erreur serveur.
+ */
+
+return callback(null, false);
 ```
 
 },
@@ -183,6 +257,11 @@ allowedHeaders: [
 'Origin'
 ],
 
+exposedHeaders: [
+'Content-Length',
+'Content-Type'
+],
+
 credentials: true,
 
 optionsSuccessStatus: 204,
@@ -190,7 +269,9 @@ optionsSuccessStatus: 204,
 maxAge: 86400
 };
 
-app.use(cors(corsOptions));
+app.use(
+cors(corsOptions)
+);
 
 /* =========================================================
 OPTIONS
@@ -202,13 +283,12 @@ cors(corsOptions)
 );
 
 /* =========================================================
-WEBHOOKS
+WEBHOOKS MONEROO
 ========================================================= */
 
 /*
 
-* Les webhooks sont montés avant express.json()
-* pour préserver le traitement éventuel du body brut.
+* Le webhook reste avant express.json().
   */
 
 app.use(
@@ -327,7 +407,7 @@ try {
 } catch (error) {
 
   console.error(
-    '❌ Health database error:',
+    '❌ Erreur PostgreSQL:',
     error
   );
 
@@ -451,7 +531,7 @@ try {
       'disabled',
 
     cors:
-      uniqueAllowedOrigins
+      normalizedAllowedOrigins
   });
 
 } catch (error) {
@@ -514,24 +594,6 @@ if (res.headersSent) {
   return next(err);
 }
 
-if (
-  err &&
-  typeof err.message === 'string' &&
-  err.message.includes('CORS')
-) {
-
-  return res.status(403).json({
-
-    ok: false,
-
-    error:
-      'CORS_ERROR',
-
-    message:
-      err.message
-  });
-}
-
 return res.status(
   err.status || 500
 ).json({
@@ -577,7 +639,7 @@ console.log(
 );
 
 /* -----------------------------------
-   DATABASE CONNECTION
+   DATABASE
 ----------------------------------- */
 
 console.log(
@@ -591,7 +653,7 @@ console.log(
 );
 
 /* -----------------------------------
-   DATABASE INITIALIZATION
+   DATABASE INIT
 ----------------------------------- */
 
 console.log(
@@ -653,10 +715,6 @@ const server =
       );
 
       console.log(
-        '📧 Service email externe: DÉSACTIVÉ'
-      );
-
-      console.log(
         '🌐 Frontend:',
         'https://sellflowic.netlify.app'
       );
@@ -679,7 +737,7 @@ const server =
       );
 
       /* -----------------------------
-         SUBSCRIPTION WORKER
+         WORKER ABONNEMENTS
       ----------------------------- */
 
       if (
@@ -706,16 +764,12 @@ const server =
     }
   );
 
-/* -----------------------------------
-   SERVER ERROR
------------------------------------ */
-
 server.on(
   'error',
   function (error) {
 
     console.error(
-      '❌ Erreur du serveur HTTP:',
+      '❌ Erreur serveur HTTP:',
       error
     );
 
