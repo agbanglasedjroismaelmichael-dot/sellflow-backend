@@ -1,3 +1,4 @@
+```javascript
 const express = require('express');
 const crypto = require('crypto');
 const { google } = require('googleapis');
@@ -23,14 +24,37 @@ const pool = getPool();
    OUTILS
 ========================================================= */
 
+/**
+ * Normalise toujours l'e-mail :
+ * - suppression des espaces
+ * - passage en minuscules
+ *
+ * Exemple :
+ * "  Test@Gmail.COM "
+ * devient :
+ * "test@gmail.com"
+ */
 function normalizeEmail(email) {
   return String(email || '')
     .trim()
     .toLowerCase();
 }
 
+/**
+ * Vérification simple du format e-mail.
+ */
+function isValidEmail(email) {
+  return /^\S+@\S+\.\S+$/.test(email);
+}
+
+/**
+ * Retourne uniquement les informations
+ * publiques de l'utilisateur.
+ */
 function publicUser(user) {
-  if (!user) return null;
+  if (!user) {
+    return null;
+  }
 
   return {
     id: user.id,
@@ -44,8 +68,47 @@ function publicUser(user) {
   };
 }
 
-function isValidEmail(email) {
-  return /^\S+@\S+\.\S+$/.test(email);
+/**
+ * Recherche un utilisateur avec son e-mail
+ * de manière insensible aux majuscules/espaces.
+ */
+async function findUserByEmail(email) {
+  const normalizedEmail = normalizeEmail(email);
+
+  const result = await pool.query(
+    `
+    SELECT
+      id,
+      name,
+      email,
+      phone,
+      country,
+      password_hash,
+      email_verified,
+      plan,
+      created_at
+    FROM users
+    WHERE LOWER(TRIM(email)) = $1
+    LIMIT 1
+    `,
+    [normalizedEmail]
+  );
+
+  return result.rows.length > 0
+    ? result.rows[0]
+    : null;
+}
+
+/**
+ * Message standard lorsqu'un e-mail
+ * existe déjà.
+ */
+function emailAlreadyExistsResponse(res) {
+  return res.status(409).json({
+    code: 'EMAIL_ALREADY_EXISTS',
+    message:
+      'Cette adresse e-mail est déjà utilisée par un compte SellFlow. Utilise une autre adresse ou connecte-toi à ton compte.'
+  });
 }
 
 /* =========================================================
@@ -69,6 +132,7 @@ router.post('/register/complete', async (req, res) => {
     phone = String(phone || '').trim();
     country = String(country || '').trim();
     password = String(password || '');
+
     password2 =
       password2 == null
         ? password
@@ -111,25 +175,14 @@ router.post('/register/complete', async (req, res) => {
     }
 
     /* -----------------------------------------
-       EMAIL DÉJÀ UTILISÉ ?
+       VÉRIFICATION E-MAIL EXISTANT
     ----------------------------------------- */
 
-    const existingUser = await pool.query(
-      `
-      SELECT id, email
-      FROM users
-      WHERE LOWER(TRIM(email)) = $1
-      LIMIT 1
-      `,
-      [email]
-    );
+    const existingUser =
+      await findUserByEmail(email);
 
-    if (existingUser.rows.length > 0) {
-      return res.status(409).json({
-        code: 'EMAIL_ALREADY_EXISTS',
-        message:
-          'Cette adresse e-mail est déjà utilisée par un compte SellFlow. Utilise une autre adresse ou connecte-toi à ton compte.'
-      });
+    if (existingUser) {
+      return emailAlreadyExistsResponse(res);
     }
 
     /* -----------------------------------------
@@ -186,21 +239,18 @@ router.post('/register/complete', async (req, res) => {
           passwordHash
         ]
       );
-    } catch (dbError) {
-      /*
-        Protection contre deux inscriptions
-        simultanées avec le même e-mail.
-      */
 
+    } catch (dbError) {
+
+      /*
+       * Protection contre deux inscriptions
+       * simultanées avec le même e-mail.
+       */
       if (
         dbError &&
         dbError.code === '23505'
       ) {
-        return res.status(409).json({
-          code: 'EMAIL_ALREADY_EXISTS',
-          message:
-            'Cette adresse e-mail est déjà utilisée par un compte SellFlow. Utilise une autre adresse ou connecte-toi à ton compte.'
-        });
+        return emailAlreadyExistsResponse(res);
       }
 
       throw dbError;
@@ -228,6 +278,7 @@ router.post('/register/complete', async (req, res) => {
     });
 
   } catch (error) {
+
     console.error(
       '[AUTH REGISTER COMPLETE]',
       error
@@ -261,6 +312,7 @@ router.post('/register', async (req, res) => {
     phone = String(phone || '').trim();
     country = String(country || '').trim();
     password = String(password || '');
+
     password2 =
       password2 == null
         ? password
@@ -306,22 +358,11 @@ router.post('/register', async (req, res) => {
        EMAIL UNIQUE
     ----------------------------------------- */
 
-    const existingUser = await pool.query(
-      `
-      SELECT id
-      FROM users
-      WHERE LOWER(TRIM(email)) = $1
-      LIMIT 1
-      `,
-      [email]
-    );
+    const existingUser =
+      await findUserByEmail(email);
 
-    if (existingUser.rows.length > 0) {
-      return res.status(409).json({
-        code: 'EMAIL_ALREADY_EXISTS',
-        message:
-          'Cette adresse e-mail est déjà utilisée par un compte SellFlow. Utilise une autre adresse ou connecte-toi.'
-      });
+    if (existingUser) {
+      return emailAlreadyExistsResponse(res);
     }
 
     /* -----------------------------------------
@@ -378,22 +419,24 @@ router.post('/register', async (req, res) => {
           passwordHash
         ]
       );
+
     } catch (dbError) {
+
       if (
         dbError &&
         dbError.code === '23505'
       ) {
-        return res.status(409).json({
-          code: 'EMAIL_ALREADY_EXISTS',
-          message:
-            'Cette adresse e-mail est déjà utilisée par un compte SellFlow. Utilise une autre adresse ou connecte-toi.'
-        });
+        return emailAlreadyExistsResponse(res);
       }
 
       throw dbError;
     }
 
     const user = result.rows[0];
+
+    /* -----------------------------------------
+       JWT
+    ----------------------------------------- */
 
     const token = signToken(user);
 
@@ -407,6 +450,7 @@ router.post('/register', async (req, res) => {
     });
 
   } catch (error) {
+
     console.error(
       '[AUTH REGISTER]',
       error
@@ -433,6 +477,10 @@ router.post('/login', async (req, res) => {
     email = normalizeEmail(email);
     password = String(password || '');
 
+    /* -----------------------------------------
+       VALIDATION
+    ----------------------------------------- */
+
     if (!email || !password) {
       return res.status(400).json({
         message:
@@ -440,33 +488,34 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    const result = await pool.query(
-      `
-      SELECT
-        id,
-        name,
-        email,
-        phone,
-        country,
-        password_hash,
-        email_verified,
-        plan,
-        created_at
-      FROM users
-      WHERE LOWER(TRIM(email)) = $1
-      LIMIT 1
-      `,
-      [email]
-    );
+    /* -----------------------------------------
+       RECHERCHE UTILISATEUR
+    ----------------------------------------- */
 
-    if (result.rows.length === 0) {
+    const user =
+      await findUserByEmail(email);
+
+    if (!user) {
       return res.status(401).json({
         message:
           'E-mail ou mot de passe incorrect.'
       });
     }
 
-    const user = result.rows[0];
+    /* -----------------------------------------
+       VÉRIFICATION MOT DE PASSE
+    ----------------------------------------- */
+
+    /*
+     * Les comptes Google peuvent avoir un mot
+     * de passe généré aléatoirement.
+     */
+    if (!user.password_hash) {
+      return res.status(401).json({
+        message:
+          'Ce compte utilise la connexion Google. Connecte-toi avec Google.'
+      });
+    }
 
     const validPassword =
       await comparePassword(
@@ -481,7 +530,12 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    const token = signToken(user);
+    /* -----------------------------------------
+       JWT
+    ----------------------------------------- */
+
+    const token =
+      signToken(user);
 
     return res.json({
       token,
@@ -489,6 +543,7 @@ router.post('/login', async (req, res) => {
     });
 
   } catch (error) {
+
     console.error(
       '[AUTH LOGIN]',
       error
@@ -510,6 +565,7 @@ router.get(
   authMiddleware,
   async (req, res) => {
     try {
+
       const userId =
         req.user?.id ||
         req.user?.userId ||
@@ -522,23 +578,24 @@ router.get(
         });
       }
 
-      const result = await pool.query(
-        `
-        SELECT
-          id,
-          name,
-          email,
-          phone,
-          country,
-          email_verified,
-          plan,
-          created_at
-        FROM users
-        WHERE id = $1
-        LIMIT 1
-        `,
-        [userId]
-      );
+      const result =
+        await pool.query(
+          `
+          SELECT
+            id,
+            name,
+            email,
+            phone,
+            country,
+            email_verified,
+            plan,
+            created_at
+          FROM users
+          WHERE id = $1
+          LIMIT 1
+          `,
+          [userId]
+        );
 
       if (result.rows.length === 0) {
         return res.status(404).json({
@@ -554,6 +611,7 @@ router.get(
       });
 
     } catch (error) {
+
       console.error(
         '[AUTH ME]',
         error
@@ -568,13 +626,14 @@ router.get(
 );
 
 /* =========================================================
-   GOOGLE / GMAIL
+   GOOGLE / GMAIL — CONNEXION
 ========================================================= */
 
 router.get(
   '/gmail/connect',
   (req, res) => {
     try {
+
       const clientId =
         process.env.GOOGLE_CLIENT_ID;
 
@@ -618,6 +677,7 @@ router.get(
       return res.redirect(url);
 
     } catch (error) {
+
       console.error(
         '[GMAIL CONNECT]',
         error
@@ -632,13 +692,14 @@ router.get(
 );
 
 /* =========================================================
-   GOOGLE / GMAIL CALLBACK
+   GOOGLE / GMAIL — CALLBACK
 ========================================================= */
 
 router.get(
   '/gmail/callback',
   async (req, res) => {
     try {
+
       const {
         code
       } = req.query;
@@ -668,6 +729,10 @@ router.get(
         );
       }
 
+      /* -----------------------------------------
+         CLIENT GOOGLE
+      ----------------------------------------- */
+
       const oauth2Client =
         new google.auth.OAuth2(
           clientId,
@@ -675,12 +740,22 @@ router.get(
           redirectUri
         );
 
+      /* -----------------------------------------
+         TOKEN GOOGLE
+      ----------------------------------------- */
+
       const {
         tokens
       } =
         await oauth2Client.getToken(code);
 
-      oauth2Client.setCredentials(tokens);
+      oauth2Client.setCredentials(
+        tokens
+      );
+
+      /* -----------------------------------------
+         PROFIL GOOGLE
+      ----------------------------------------- */
 
       const oauth2 =
         google.oauth2({
@@ -705,46 +780,47 @@ router.get(
       }
 
       /* -----------------------------------------
-         RECHERCHE DU COMPTE EXISTANT
+         RECHERCHE COMPTE EXISTANT
       ----------------------------------------- */
 
-      const existingUser =
-        await pool.query(
-          `
-          SELECT
-            id,
-            name,
-            email,
-            phone,
-            country,
-            email_verified,
-            plan,
-            created_at
-          FROM users
-          WHERE LOWER(TRIM(email)) = $1
-          LIMIT 1
-          `,
-          [email]
+      let user =
+        await findUserByEmail(email);
+
+      /* -----------------------------------------
+         SI LE COMPTE EXISTE
+      ----------------------------------------- */
+
+      if (user) {
+
+        /*
+         * IMPORTANT :
+         *
+         * On NE crée PAS de deuxième compte.
+         *
+         * Exemple :
+         *
+         * Compte SellFlow :
+         * test@gmail.com
+         *
+         * Google :
+         * TEST@GMAIL.COM
+         *
+         * => même compte.
+         */
+
+        console.log(
+          `🔐 Google : compte existant utilisé pour ${email}`
         );
 
-      let user;
-
-      if (existingUser.rows.length > 0) {
-        /*
-          L'adresse existe déjà :
-          on utilise le compte existant.
-        */
-
-        user = existingUser.rows[0];
-
       } else {
-        /*
-          Création d'un nouveau compte Google
-          uniquement si l'adresse n'existe pas.
-        */
+
+        /* -----------------------------------------
+           CRÉATION COMPTE GOOGLE
+        ----------------------------------------- */
 
         const randomPassword =
-          crypto.randomBytes(32).toString('hex');
+          crypto.randomBytes(32)
+            .toString('hex');
 
         const passwordHash =
           await hashPassword(
@@ -752,6 +828,7 @@ router.get(
           );
 
         try {
+
           const inserted =
             await pool.query(
               `
@@ -781,6 +858,7 @@ router.get(
                 email,
                 phone,
                 country,
+                password_hash,
                 email_verified,
                 plan,
                 created_at
@@ -800,40 +878,35 @@ router.get(
               ]
             );
 
-          user = inserted.rows[0];
+          user =
+            inserted.rows[0];
+
+          console.log(
+            `✅ Google : nouveau compte créé pour ${email}`
+          );
 
         } catch (dbError) {
+
           /*
-            Si une autre requête a créé le compte
-            entre-temps, on récupère ce compte.
-          */
+           * Deux requêtes Google peuvent arriver
+           * quasiment en même temps.
+           *
+           * Si PostgreSQL signale que l'e-mail
+           * existe déjà, on récupère simplement
+           * le compte existant.
+           */
 
           if (
             dbError &&
             dbError.code === '23505'
           ) {
-            const retry =
-              await pool.query(
-                `
-                SELECT
-                  id,
-                  name,
-                  email,
-                  phone,
-                  country,
-                  email_verified,
-                  plan,
-                  created_at
-                FROM users
-                WHERE LOWER(TRIM(email)) = $1
-                LIMIT 1
-                `,
-                [email]
+
+            user =
+              await findUserByEmail(
+                email
               );
 
-            if (retry.rows.length > 0) {
-              user = retry.rows[0];
-            } else {
+            if (!user) {
               throw dbError;
             }
 
@@ -851,18 +924,24 @@ router.get(
         signToken(user);
 
       /* -----------------------------------------
-         REDIRECTION FRONTEND
+         FRONTEND
       ----------------------------------------- */
 
       const frontend =
         process.env.FRONTEND_URL ||
         'https://sellflowic.netlify.app';
 
+      /*
+       * Redirection vers le frontend
+       * avec le JWT.
+       */
+
       return res.redirect(
         `${frontend}/#google-auth-success?token=${encodeURIComponent(token)}`
       );
 
     } catch (error) {
+
       console.error(
         '[GMAIL CALLBACK]',
         error
@@ -880,3 +959,4 @@ router.get(
 ========================================================= */
 
 module.exports = router;
+```
