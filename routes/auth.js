@@ -5,906 +5,982 @@ const { google } = require('googleapis');
 const { getPool } = require('../config/database');
 
 const {
-  hashPassword,
-  comparePassword,
-  signToken,
-  authMiddleware
+hashPassword,
+comparePassword,
+signToken,
+authMiddleware
 } = require('../utils/auth');
 
 const router = express.Router();
 
-/* =========================================================
-   BASE DE DONNÉES
-========================================================= */
-
 const pool = getPool();
 
 /* =========================================================
-   CONFIGURATION
+CONFIGURATION
 ========================================================= */
 
 const FRONTEND_URL =
-  process.env.FRONTEND_URL ||
-  'https://sellflowic.netlify.app';
+process.env.FRONTEND_URL ||
+'https://sellflowic.netlify.app';
 
 const BACKEND_URL =
-  process.env.BACKEND_URL ||
-  'https://sellflow-backend.onrender.com';
+process.env.BACKEND_URL ||
+'https://sellflow-backend.onrender.com';
+
+const GOOGLE_CLIENT_ID =
+process.env.GOOGLE_CLIENT_ID || '';
+
+const GOOGLE_CLIENT_SECRET =
+process.env.GOOGLE_CLIENT_SECRET || '';
+
+const GOOGLE_REDIRECT_URI =
+process.env.GOOGLE_REDIRECT_URI ||
+`${BACKEND_URL}/auth/gmail/callback`;
 
 /* =========================================================
-   OUTILS
+HELPERS
 ========================================================= */
 
-/**
- * Normalise un e-mail :
- * - conversion en texte
- * - suppression des espaces
- * - minuscules
- */
-function normalizeEmail(email) {
+/*
+
+* Normalisation obligatoire des e-mails.
+*
+* Exemple :
+* " [Test@Email.COM](mailto:Test@Email.COM) "
+* devient :
+* "[test@email.com](mailto:test@email.com)"
+  */
+  function normalizeEmail(email) {
   return String(email || '')
-    .trim()
-    .toLowerCase();
-}
+  .trim()
+  .toLowerCase();
+  }
 
-/**
- * Vérification simple du format e-mail.
- */
-function isValidEmail(email) {
-  return /^\S+@\S+\.\S+$/.test(email);
-}
+/*
 
-/**
- * Retourne uniquement les données publiques
- * d'un utilisateur.
- */
-function publicUser(user) {
+* Vérification simple de l'adresse e-mail.
+  */
+  function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+.[^\s@]+$/.test(
+  email
+  );
+  }
+
+/*
+
+* Réponse publique utilisateur.
+*
+* Ne jamais envoyer le mot de passe au frontend.
+  */
+  function publicUser(user) {
   if (!user) {
-    return null;
+  return null;
   }
 
-  return {
-    id: user.id,
-    name: user.name || '',
-    email: normalizeEmail(user.email),
-    phone: user.phone || '',
-    country: user.country || '',
-    email_verified: user.email_verified === true,
-    plan: user.plan || 'free',
-    created_at: user.created_at
-  };
+return {
+id: user.id,
+name: user.name,
+email: user.email,
+phone: user.phone || null,
+country: user.country || null,
+plan: user.plan || 'free',
+email_verified:
+user.email_verified !== false,
+subscription_status:
+user.subscription_status || null,
+subscription_started_at:
+user.subscription_started_at || null,
+subscription_expires_at:
+user.subscription_expires_at || null,
+created_at:
+user.created_at || null,
+updated_at:
+user.updated_at || null
+};
 }
 
-/**
- * Recherche un utilisateur par e-mail.
- *
- * La recherche est volontairement normalisée
- * afin d'éviter les doublons du type :
- *
- * Test@gmail.com
- * test@gmail.com
- *  test@gmail.com
- */
-async function findUserByEmail(email) {
-  const normalizedEmail = normalizeEmail(email);
+/*
 
-  if (!normalizedEmail) {
-    return null;
+* Recherche d'un utilisateur avec e-mail normalisé.
+  */
+  async function findUserByEmail(email) {
+  const normalizedEmail =
+  normalizeEmail(email);
+
+if (!normalizedEmail) {
+return null;
+}
+
+const result = await pool.query(
+`       SELECT *
+      FROM users
+      WHERE LOWER(TRIM(email)) = $1
+      LIMIT 1
+    `,
+[normalizedEmail]
+);
+
+return result.rows[0] || null;
+}
+
+/*
+
+* Vérifie si un e-mail existe déjà.
+  */
+  async function emailExists(email) {
+  const user =
+  await findUserByEmail(email);
+
+return Boolean(user);
+}
+
+/*
+
+* Création centralisée d'un utilisateur.
+*
+* IMPORTANT :
+* * UUID généré par PostgreSQL
+* * e-mail déjà normalisé
+* * email_verified = TRUE
+* * aucune vérification par e-mail
+    */
+    async function createUser({
+    name,
+    email,
+    phone,
+    country,
+    passwordHash,
+    plan = 'free'
+    }) {
+    const normalizedEmail =
+    normalizeEmail(email);
+
+const result = await pool.query(
+`       INSERT INTO users (
+        id,
+        name,
+        email,
+        phone,
+        country,
+        password_hash,
+        email_verified,
+        plan
+      )
+      VALUES (
+        gen_random_uuid(),
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        TRUE,
+        $6
+      )
+      RETURNING *
+    `,
+[
+String(name || '').trim(),
+normalizedEmail,
+phone ? String(phone).trim() : null,
+country ? String(country).trim() : null,
+passwordHash,
+plan
+]
+);
+
+return result.rows[0];
+}
+
+/*
+
+* Réponse standard pour un e-mail déjà utilisé.
+  */
+  function emailAlreadyExistsResponse(res) {
+  return res.status(409).json({
+  ok: false,
+  code: 'EMAIL_ALREADY_EXISTS',
+  message:
+  'Cette adresse e-mail est déjà utilisée par un compte.'
+  });
   }
 
-  const result = await pool.query(
-    `
-    SELECT
-      id,
+/*
+
+* Validation commune inscription.
+  */
+  function validateRegistrationData(body) {
+  const name =
+  String(body.name || '').trim();
+
+const email =
+normalizeEmail(body.email);
+
+const password =
+String(body.password || '');
+
+const phone =
+body.phone
+? String(body.phone).trim()
+: null;
+
+const country =
+body.country
+? String(body.country).trim()
+: null;
+
+if (!name) {
+return {
+valid: false,
+status: 400,
+message:
+'Le nom est obligatoire.'
+};
+}
+
+if (!email || !isValidEmail(email)) {
+return {
+valid: false,
+status: 400,
+message:
+'Veuillez fournir une adresse e-mail valide.'
+};
+}
+
+if (password.length < 6) {
+return {
+valid: false,
+status: 400,
+message:
+'Le mot de passe doit contenir au moins 6 caractères.'
+};
+}
+
+return {
+valid: true,
+data: {
+name,
+email,
+phone,
+country,
+password
+}
+};
+}
+
+/* =========================================================
+INSCRIPTION — VERSION COMPLETE
+========================================================= */
+
+router.post(
+'/register/complete',
+async function (req, res) {
+try {
+const validation =
+validateRegistrationData(req.body);
+
+```
+  if (!validation.valid) {
+    return res.status(
+      validation.status
+    ).json({
+      ok: false,
+      message:
+        validation.message
+    });
+  }
+
+  const {
+    name,
+    email,
+    phone,
+    country,
+    password
+  } = validation.data;
+
+  /*
+   * Première vérification.
+   */
+  if (
+    await emailExists(email)
+  ) {
+    return emailAlreadyExistsResponse(
+      res
+    );
+  }
+
+  const passwordHash =
+    await hashPassword(password);
+
+  let user;
+
+  try {
+    user = await createUser({
       name,
       email,
       phone,
       country,
-      password_hash,
-      email_verified,
-      plan,
-      created_at
-    FROM users
-    WHERE LOWER(TRIM(email)) = $1
-    LIMIT 1
-    `,
-    [normalizedEmail]
+      passwordHash,
+      plan: 'free'
+    });
+  } catch (error) {
+    /*
+     * Protection contre les inscriptions
+     * simultanées avec le même e-mail.
+     */
+    if (
+      error &&
+      error.code === '23505'
+    ) {
+      return emailAlreadyExistsResponse(
+        res
+      );
+    }
+
+    throw error;
+  }
+
+  const token =
+    signToken(user);
+
+  return res.status(201).json({
+    ok: true,
+
+    message:
+      'Compte créé avec succès.',
+
+    token,
+
+    user:
+      publicUser(user)
+  });
+
+} catch (error) {
+  console.error(
+    '❌ Erreur register/complete:',
+    error
   );
 
-  return result.rows.length > 0
-    ? result.rows[0]
-    : null;
-}
+  return res.status(
+    500
+  ).json({
+    ok: false,
 
-/**
- * Réponse standard lorsqu'un e-mail existe déjà.
- */
-function emailAlreadyExistsResponse(res) {
-  return res.status(409).json({
-    code: 'EMAIL_ALREADY_EXISTS',
+    error:
+      'REGISTER_ERROR',
+
     message:
-      'Cette adresse e-mail est déjà utilisée par un compte SellFlow. Utilise une autre adresse ou connecte-toi à ton compte.'
+      'Impossible de créer le compte.'
   });
 }
+```
 
-/**
- * Valide les informations communes
- * d'une inscription.
- */
-function validateRegistrationData({
-  name,
-  email,
-  phone,
-  password,
-  password2
-}) {
-  if (!name) {
-    return 'Le nom est obligatoire.';
-  }
-
-  if (!email || !isValidEmail(email)) {
-    return 'Adresse e-mail invalide.';
-  }
-
-  if (!phone || phone.length < 5) {
-    return 'Numéro de téléphone invalide.';
-  }
-
-  if (!password || password.length < 8) {
-    return 'Le mot de passe doit contenir au moins 8 caractères.';
-  }
-
-  if (password !== password2) {
-    return 'Les mots de passe ne correspondent pas.';
-  }
-
-  return null;
 }
+);
 
-/**
- * Création réelle d'un compte.
- *
- * Cette fonction est utilisée par les deux routes
- * d'inscription afin d'éviter de dupliquer le code.
- */
-async function createUser({
-  name,
-  email,
-  phone,
-  country,
-  passwordHash
-}) {
-  const result = await pool.query(
-    `
-    INSERT INTO users (
-      id,
+/* =========================================================
+INSCRIPTION CLASSIQUE
+========================================================= */
+
+router.post(
+'/register',
+async function (req, res) {
+try {
+const validation =
+validateRegistrationData(req.body);
+
+```
+  if (!validation.valid) {
+    return res.status(
+      validation.status
+    ).json({
+      ok: false,
+      message:
+        validation.message
+    });
+  }
+
+  const {
+    name,
+    email,
+    phone,
+    country,
+    password
+  } = validation.data;
+
+  /*
+   * Une seule adresse e-mail = un seul compte.
+   */
+  if (
+    await emailExists(email)
+  ) {
+    return emailAlreadyExistsResponse(
+      res
+    );
+  }
+
+  const passwordHash =
+    await hashPassword(password);
+
+  let user;
+
+  try {
+    user = await createUser({
       name,
       email,
       phone,
       country,
-      password_hash,
-      email_verified,
-      plan
-    )
-    VALUES (
-      gen_random_uuid(),
-      $1,
-      $2,
-      $3,
-      $4,
-      $5,
-      TRUE,
-      'free'
-    )
-    RETURNING
-      id,
-      name,
-      email,
-      phone,
-      country,
-      password_hash,
-      email_verified,
-      plan,
-      created_at
-    `,
-    [
-      name,
-      email,
-      phone,
-      country,
-      passwordHash
-    ]
+      passwordHash,
+      plan: 'free'
+    });
+  } catch (error) {
+    if (
+      error &&
+      error.code === '23505'
+    ) {
+      return emailAlreadyExistsResponse(
+        res
+      );
+    }
+
+    throw error;
+  }
+
+  const token =
+    signToken(user);
+
+  return res.status(201).json({
+    ok: true,
+
+    message:
+      'Compte créé avec succès.',
+
+    token,
+
+    user:
+      publicUser(user)
+  });
+
+} catch (error) {
+  console.error(
+    '❌ Erreur register:',
+    error
   );
 
-  return result.rows[0];
+  return res.status(
+    500
+  ).json({
+    ok: false,
+
+    error:
+      'REGISTER_ERROR',
+
+    message:
+      'Impossible de créer le compte.'
+  });
+}
+```
+
+}
+);
+
+/* =========================================================
+CONNEXION
+========================================================= */
+
+router.post(
+'/login',
+async function (req, res) {
+try {
+const email =
+normalizeEmail(
+req.body.email
+);
+
+```
+  const password =
+    String(
+      req.body.password || ''
+    );
+
+  if (
+    !email ||
+    !isValidEmail(email)
+  ) {
+    return res.status(400).json({
+      ok: false,
+
+      message:
+        'Veuillez fournir une adresse e-mail valide.'
+    });
+  }
+
+  if (!password) {
+    return res.status(400).json({
+      ok: false,
+
+      message:
+        'Le mot de passe est obligatoire.'
+    });
+  }
+
+  const user =
+    await findUserByEmail(email);
+
+  if (!user) {
+    return res.status(401).json({
+      ok: false,
+
+      code:
+        'INVALID_CREDENTIALS',
+
+      message:
+        'E-mail ou mot de passe incorrect.'
+    });
+  }
+
+  if (
+    !user.password_hash
+  ) {
+    return res.status(401).json({
+      ok: false,
+
+      code:
+        'GOOGLE_ACCOUNT',
+
+      message:
+        'Ce compte utilise la connexion Google. Utilisez le bouton Google pour vous connecter.'
+    });
+  }
+
+  const passwordValid =
+    await comparePassword(
+      password,
+      user.password_hash
+    );
+
+  if (!passwordValid) {
+    return res.status(401).json({
+      ok: false,
+
+      code:
+        'INVALID_CREDENTIALS',
+
+      message:
+        'E-mail ou mot de passe incorrect.'
+    });
+  }
+
+  const token =
+    signToken(user);
+
+  return res.json({
+    ok: true,
+
+    message:
+      'Connexion réussie.',
+
+    token,
+
+    user:
+      publicUser(user)
+  });
+
+} catch (error) {
+  console.error(
+    '❌ Erreur login:',
+    error
+  );
+
+  return res.status(
+    500
+  ).json({
+    ok: false,
+
+    error:
+      'LOGIN_ERROR',
+
+    message:
+      'Impossible de se connecter.'
+  });
+}
+```
+
+}
+);
+
+/* =========================================================
+UTILISATEUR CONNECTÉ
+========================================================= */
+
+router.get(
+'/me',
+authMiddleware,
+async function (req, res) {
+try {
+const userId =
+req.user &&
+(req.user.id ||
+req.user.userId ||
+req.user.sub);
+
+```
+  if (!userId) {
+    return res.status(401).json({
+      ok: false,
+
+      message:
+        'Utilisateur non authentifié.'
+    });
+  }
+
+  const result =
+    await pool.query(
+      `
+        SELECT *
+        FROM users
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [userId]
+    );
+
+  if (
+    result.rows.length === 0
+  ) {
+    return res.status(404).json({
+      ok: false,
+
+      message:
+        'Compte introuvable.'
+    });
+  }
+
+  return res.json({
+    ok: true,
+
+    user:
+      publicUser(
+        result.rows[0]
+      )
+  });
+
+} catch (error) {
+  console.error(
+    '❌ Erreur /me:',
+    error
+  );
+
+  return res.status(
+    500
+  ).json({
+    ok: false,
+
+    error:
+      'ME_ERROR',
+
+    message:
+      'Impossible de récupérer le compte.'
+  });
+}
+```
+
+}
+);
+
+/* =========================================================
+GOOGLE / GMAIL
+========================================================= */
+
+function createGoogleClient() {
+if (
+!GOOGLE_CLIENT_ID ||
+!GOOGLE_CLIENT_SECRET
+) {
+return null;
+}
+
+return new google.auth.OAuth2(
+GOOGLE_CLIENT_ID,
+GOOGLE_CLIENT_SECRET,
+GOOGLE_REDIRECT_URI
+);
 }
 
 /* =========================================================
-   INSCRIPTION
-   SANS VÉRIFICATION EMAIL
+GOOGLE CONNECT
 ========================================================= */
 
-router.post('/register/complete', async (req, res) => {
-  try {
-    let {
-      name,
-      email,
-      phone,
-      country,
-      password,
-      password2
-    } = req.body || {};
+router.get(
+'/gmail/connect',
+function (req, res) {
+try {
+const client =
+createGoogleClient();
 
-    name = String(name || '').trim();
-    email = normalizeEmail(email);
-    phone = String(phone || '').trim();
-    country = String(country || '').trim();
-    password = String(password || '');
+```
+  if (!client) {
+    return res.status(500).json({
+      ok: false,
 
-    password2 =
-      password2 == null
-        ? password
-        : String(password2);
+      error:
+        'GOOGLE_NOT_CONFIGURED',
 
-    /* -----------------------------------------
-       VALIDATION
-    ----------------------------------------- */
+      message:
+        'La connexion Google n’est pas configurée sur le backend.'
+    });
+  }
 
-    const validationError =
-      validateRegistrationData({
-        name,
-        email,
-        phone,
-        password,
-        password2
-      });
+  const url =
+    client.generateAuthUrl({
+      access_type: 'offline',
 
-    if (validationError) {
-      return res.status(400).json({
-        message: validationError
-      });
-    }
+      prompt: 'select_account',
 
-    /* -----------------------------------------
-       VÉRIFICATION EMAIL EXISTANT
-    ----------------------------------------- */
+      scope: [
+        'openid',
+        'profile',
+        'email'
+      ]
+    });
 
-    const existingUser =
-      await findUserByEmail(email);
+  return res.redirect(url);
 
-    if (existingUser) {
-      return emailAlreadyExistsResponse(res);
-    }
+} catch (error) {
+  console.error(
+    '❌ Erreur Gmail connect:',
+    error
+  );
 
-    /* -----------------------------------------
-       HASH MOT DE PASSE
-    ----------------------------------------- */
+  return res.status(
+    500
+  ).json({
+    ok: false,
+
+    message:
+      'Impossible de démarrer la connexion Google.'
+  });
+}
+```
+
+}
+);
+
+/* =========================================================
+GOOGLE CALLBACK
+========================================================= */
+
+router.get(
+'/gmail/callback',
+async function (req, res) {
+try {
+const code =
+String(
+req.query.code || ''
+).trim();
+
+```
+  if (!code) {
+    return res.redirect(
+      FRONTEND_URL +
+      '/#google-auth-error'
+    );
+  }
+
+  const client =
+    createGoogleClient();
+
+  if (!client) {
+    return res.redirect(
+      FRONTEND_URL +
+      '/#google-auth-error'
+    );
+  }
+
+  const tokenResponse =
+    await client.getToken(code);
+
+  client.setCredentials(
+    tokenResponse.tokens
+  );
+
+  const oauth2 =
+    google.oauth2({
+      auth: client,
+      version: 'v2'
+    });
+
+  const userInfoResponse =
+    await oauth2.userinfo.get();
+
+  const googleUser =
+    userInfoResponse.data;
+
+  const googleEmail =
+    normalizeEmail(
+      googleUser.email
+    );
+
+  if (
+    !googleEmail ||
+    !isValidEmail(
+      googleEmail
+    )
+  ) {
+    return res.redirect(
+      FRONTEND_URL +
+      '/#google-auth-error'
+    );
+  }
+
+  /*
+   * IMPORTANT :
+   * On cherche d'abord l'adresse e-mail.
+   *
+   * Si le compte existe déjà :
+   * on réutilise ce compte.
+   *
+   * Google ne crée donc pas un deuxième
+   * compte avec la même adresse.
+   */
+  let user =
+    await findUserByEmail(
+      googleEmail
+    );
+
+  if (!user) {
+    /*
+     * Création d'un compte Google.
+     *
+     * On génère un mot de passe aléatoire
+     * uniquement parce que la colonne
+     * password_hash peut être obligatoire
+     * dans certaines installations.
+     */
+    const randomPassword =
+      crypto.randomBytes(32)
+        .toString('hex');
 
     const passwordHash =
-      await hashPassword(password);
-
-    /* -----------------------------------------
-       CRÉATION
-    ----------------------------------------- */
-
-    let user;
+      await hashPassword(
+        randomPassword
+      );
 
     try {
-      user = await createUser({
-        name,
-        email,
-        phone,
-        country,
-        passwordHash
-      });
-    } catch (dbError) {
+      user =
+        await createUser({
+          name:
+            String(
+              googleUser.name ||
+              googleUser.given_name ||
+              'Utilisateur SellFlow'
+            ).trim(),
 
+          email:
+            googleEmail,
+
+          phone:
+            null,
+
+          country:
+            null,
+
+          passwordHash,
+
+          plan:
+            'free'
+        });
+    } catch (error) {
       /*
-       * PostgreSQL 23505 =
-       * violation d'une contrainte UNIQUE.
-       *
-       * Cela protège contre deux inscriptions
-       * simultanées avec le même e-mail.
+       * Cas de course :
+       * quelqu'un a créé le même compte
+       * entre notre SELECT et INSERT.
        */
       if (
-        dbError &&
-        dbError.code === '23505'
+        error &&
+        error.code === '23505'
       ) {
-        return emailAlreadyExistsResponse(res);
-      }
-
-      throw dbError;
-    }
-
-    /* -----------------------------------------
-       JWT
-    ----------------------------------------- */
-
-    const token =
-      signToken(user);
-
-    /* -----------------------------------------
-       RÉPONSE
-    ----------------------------------------- */
-
-    return res.status(201).json({
-      created: true,
-      verified: true,
-      message:
-        'Compte SellFlow créé avec succès.',
-      token,
-      user: publicUser(user)
-    });
-
-  } catch (error) {
-
-    console.error(
-      '[AUTH REGISTER COMPLETE]',
-      error
-    );
-
-    return res.status(500).json({
-      message:
-        'Impossible de créer le compte pour le moment.'
-    });
-  }
-});
-
-/* =========================================================
-   REGISTER CLASSIQUE
-   COMPATIBILITÉ ANCIEN FRONTEND
-========================================================= */
-
-router.post('/register', async (req, res) => {
-  try {
-    let {
-      name,
-      email,
-      phone,
-      country,
-      password,
-      password2
-    } = req.body || {};
-
-    name = String(name || '').trim();
-    email = normalizeEmail(email);
-    phone = String(phone || '').trim();
-    country = String(country || '').trim();
-    password = String(password || '');
-
-    password2 =
-      password2 == null
-        ? password
-        : String(password2);
-
-    /* -----------------------------------------
-       VALIDATION
-    ----------------------------------------- */
-
-    const validationError =
-      validateRegistrationData({
-        name,
-        email,
-        phone,
-        password,
-        password2
-      });
-
-    if (validationError) {
-      return res.status(400).json({
-        message: validationError
-      });
-    }
-
-    /* -----------------------------------------
-       EMAIL UNIQUE
-    ----------------------------------------- */
-
-    const existingUser =
-      await findUserByEmail(email);
-
-    if (existingUser) {
-      return emailAlreadyExistsResponse(res);
-    }
-
-    /* -----------------------------------------
-       HASH
-    ----------------------------------------- */
-
-    const passwordHash =
-      await hashPassword(password);
-
-    /* -----------------------------------------
-       CRÉATION
-    ----------------------------------------- */
-
-    let user;
-
-    try {
-      user = await createUser({
-        name,
-        email,
-        phone,
-        country,
-        passwordHash
-      });
-    } catch (dbError) {
-
-      if (
-        dbError &&
-        dbError.code === '23505'
-      ) {
-        return emailAlreadyExistsResponse(res);
-      }
-
-      throw dbError;
-    }
-
-    /* -----------------------------------------
-       JWT
-    ----------------------------------------- */
-
-    const token =
-      signToken(user);
-
-    /* -----------------------------------------
-       RÉPONSE
-    ----------------------------------------- */
-
-    return res.status(201).json({
-      created: true,
-      verified: true,
-      message:
-        'Compte créé avec succès.',
-      token,
-      user: publicUser(user)
-    });
-
-  } catch (error) {
-
-    console.error(
-      '[AUTH REGISTER]',
-      error
-    );
-
-    return res.status(500).json({
-      message:
-        'Impossible de créer le compte pour le moment.'
-    });
-  }
-});
-
-/* =========================================================
-   CONNEXION
-========================================================= */
-
-router.post('/login', async (req, res) => {
-  try {
-    let {
-      email,
-      password
-    } = req.body || {};
-
-    email = normalizeEmail(email);
-    password = String(password || '');
-
-    /* -----------------------------------------
-       VALIDATION
-    ----------------------------------------- */
-
-    if (!email || !password) {
-      return res.status(400).json({
-        message:
-          'E-mail et mot de passe obligatoires.'
-      });
-    }
-
-    /* -----------------------------------------
-       RECHERCHE
-    ----------------------------------------- */
-
-    const user =
-      await findUserByEmail(email);
-
-    if (!user) {
-      return res.status(401).json({
-        message:
-          'E-mail ou mot de passe incorrect.'
-      });
-    }
-
-    /* -----------------------------------------
-       MOT DE PASSE
-    ----------------------------------------- */
-
-    if (!user.password_hash) {
-      return res.status(401).json({
-        message:
-          'Ce compte utilise la connexion Google. Connecte-toi avec Google.'
-      });
-    }
-
-    const validPassword =
-      await comparePassword(
-        password,
-        user.password_hash
-      );
-
-    if (!validPassword) {
-      return res.status(401).json({
-        message:
-          'E-mail ou mot de passe incorrect.'
-      });
-    }
-
-    /* -----------------------------------------
-       JWT
-    ----------------------------------------- */
-
-    const token =
-      signToken(user);
-
-    /* -----------------------------------------
-       RÉPONSE
-    ----------------------------------------- */
-
-    return res.json({
-      token,
-      user: publicUser(user)
-    });
-
-  } catch (error) {
-
-    console.error(
-      '[AUTH LOGIN]',
-      error
-    );
-
-    return res.status(500).json({
-      message:
-        'Impossible de se connecter pour le moment.'
-    });
-  }
-});
-
-/* =========================================================
-   PROFIL UTILISATEUR
-========================================================= */
-
-router.get(
-  '/me',
-  authMiddleware,
-  async (req, res) => {
-    try {
-
-      const userId =
-        req.user?.id ||
-        req.user?.userId ||
-        req.user?.sub;
-
-      if (!userId) {
-        return res.status(401).json({
-          message:
-            'Session invalide.'
-        });
-      }
-
-      const result =
-        await pool.query(
-          `
-          SELECT
-            id,
-            name,
-            email,
-            phone,
-            country,
-            email_verified,
-            plan,
-            created_at
-          FROM users
-          WHERE id = $1
-          LIMIT 1
-          `,
-          [userId]
-        );
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({
-          message:
-            'Utilisateur introuvable.'
-        });
-      }
-
-      return res.json({
-        user: publicUser(
-          result.rows[0]
-        )
-      });
-
-    } catch (error) {
-
-      console.error(
-        '[AUTH ME]',
-        error
-      );
-
-      return res.status(500).json({
-        message:
-          'Impossible de récupérer le compte.'
-      });
-    }
-  }
-);
-
-/* =========================================================
-   GOOGLE / GMAIL — CONNEXION
-========================================================= */
-
-router.get(
-  '/gmail/connect',
-  (req, res) => {
-    try {
-
-      const clientId =
-        process.env.GOOGLE_CLIENT_ID;
-
-      const clientSecret =
-        process.env.GOOGLE_CLIENT_SECRET;
-
-      const redirectUri =
-        process.env.GOOGLE_REDIRECT_URI ||
-        `${BACKEND_URL}/auth/gmail/callback`;
-
-      if (!clientId || !clientSecret) {
-        return res.status(500).json({
-          message:
-            'Configuration Google OAuth manquante.'
-        });
-      }
-
-      const oauth2Client =
-        new google.auth.OAuth2(
-          clientId,
-          clientSecret,
-          redirectUri
-        );
-
-      const scopes = [
-        'openid',
-        'email',
-        'profile'
-      ];
-
-      const url =
-        oauth2Client.generateAuthUrl({
-          access_type: 'offline',
-          prompt: 'consent',
-          scope: scopes
-        });
-
-      return res.redirect(url);
-
-    } catch (error) {
-
-      console.error(
-        '[GMAIL CONNECT]',
-        error
-      );
-
-      return res.status(500).json({
-        message:
-          'Impossible de connecter Google.'
-      });
-    }
-  }
-);
-
-/* =========================================================
-   GOOGLE / GMAIL — CALLBACK
-========================================================= */
-
-router.get(
-  '/gmail/callback',
-  async (req, res) => {
-    try {
-
-      const {
-        code
-      } = req.query;
-
-      if (!code) {
-        return res.status(400).send(
-          'Code Google manquant.'
-        );
-      }
-
-      const clientId =
-        process.env.GOOGLE_CLIENT_ID;
-
-      const clientSecret =
-        process.env.GOOGLE_CLIENT_SECRET;
-
-      const redirectUri =
-        process.env.GOOGLE_REDIRECT_URI ||
-        `${BACKEND_URL}/auth/gmail/callback`;
-
-      if (!clientId || !clientSecret) {
-        return res.status(500).send(
-          'Configuration Google OAuth manquante.'
-        );
-      }
-
-      /* -----------------------------------------
-         CLIENT GOOGLE
-      ----------------------------------------- */
-
-      const oauth2Client =
-        new google.auth.OAuth2(
-          clientId,
-          clientSecret,
-          redirectUri
-        );
-
-      /* -----------------------------------------
-         RÉCUPÉRATION TOKEN
-      ----------------------------------------- */
-
-      const {
-        tokens
-      } =
-        await oauth2Client.getToken(code);
-
-      oauth2Client.setCredentials(
-        tokens
-      );
-
-      /* -----------------------------------------
-         PROFIL GOOGLE
-      ----------------------------------------- */
-
-      const oauth2 =
-        google.oauth2({
-          auth: oauth2Client,
-          version: 'v2'
-        });
-
-      const {
-        data: profile
-      } =
-        await oauth2.userinfo.get();
-
-      const email =
-        normalizeEmail(
-          profile.email
-        );
-
-      if (!email) {
-        return res.status(400).send(
-          'Google n’a pas retourné d’adresse e-mail.'
-        );
-      }
-
-      /* -----------------------------------------
-         COMPTE EXISTANT
-      ----------------------------------------- */
-
-      let user =
-        await findUserByEmail(email);
-
-      if (user) {
-
-        /*
-         * IMPORTANT :
-         *
-         * Si l'e-mail existe déjà,
-         * on utilise CE compte.
-         *
-         * Aucun deuxième compte n'est créé.
-         */
-
-        console.log(
-          `🔐 Google : compte existant utilisé pour ${email}`
-        );
-
+        user =
+          await findUserByEmail(
+            googleEmail
+          );
       } else {
-
-        /* -----------------------------------------
-           NOUVEAU COMPTE GOOGLE
-        ----------------------------------------- */
-
-        const randomPassword =
-          crypto.randomBytes(32)
-            .toString('hex');
-
-        const passwordHash =
-          await hashPassword(
-            randomPassword
-          );
-
-        try {
-
-          user =
-            await createUser({
-              name:
-                profile.name ||
-                profile.given_name ||
-                'Utilisateur Google',
-
-              email,
-
-              phone: '',
-
-              country: '',
-
-              passwordHash
-            });
-
-          console.log(
-            `✅ Google : nouveau compte créé pour ${email}`
-          );
-
-        } catch (dbError) {
-
-          /*
-           * Si un autre processus a créé
-           * le compte entre-temps,
-           * PostgreSQL peut retourner 23505.
-           *
-           * Dans ce cas, on récupère
-           * le compte existant.
-           */
-
-          if (
-            dbError &&
-            dbError.code === '23505'
-          ) {
-
-            user =
-              await findUserByEmail(
-                email
-              );
-
-            if (!user) {
-              throw dbError;
-            }
-
-          } else {
-            throw dbError;
-          }
-        }
+        throw error;
       }
-
-      /* -----------------------------------------
-         JWT
-      ----------------------------------------- */
-
-      const token =
-        signToken(user);
-
-      /* -----------------------------------------
-         REDIRECTION FRONTEND
-      ----------------------------------------- */
-
-      return res.redirect(
-        `${FRONTEND_URL}/#google-auth-success?token=${encodeURIComponent(token)}`
-      );
-
-    } catch (error) {
-
-      console.error(
-        '[GMAIL CALLBACK]',
-        error
-      );
-
-      return res.status(500).send(
-        'Connexion Google impossible.'
-      );
     }
   }
+
+  if (!user) {
+    return res.redirect(
+      FRONTEND_URL +
+      '/#google-auth-error'
+    );
+  }
+
+  const token =
+    signToken(user);
+
+  /*
+   * Le token est transmis au frontend.
+   *
+   * Le frontend peut ensuite récupérer /auth/me.
+   */
+  return res.redirect(
+    FRONTEND_URL +
+    '/#google-auth-success?token=' +
+    encodeURIComponent(token)
+  );
+
+} catch (error) {
+  console.error(
+    '❌ Erreur Gmail callback:',
+    error
+  );
+
+  return res.redirect(
+    FRONTEND_URL +
+    '/#google-auth-error'
+  );
+}
+```
+
+}
 );
 
 /* =========================================================
-   EXPORT
+ROUTE DE TEST
 ========================================================= */
+
+router.get(
+'/status',
+function (req, res) {
+return res.json({
+ok: true,
+
+```
+  service:
+    'SellFlow authentication',
+
+  version:
+    'auth-2.0',
+
+  emailVerification:
+    'disabled',
+
+  uniqueEmail:
+    'enabled',
+
+  googleAuth:
+    GOOGLE_CLIENT_ID &&
+    GOOGLE_CLIENT_SECRET
+      ? 'configured'
+      : 'not-configured',
+
+  resend:
+    'disabled'
+});
+```
+
+}
+);
 
 module.exports = router;
