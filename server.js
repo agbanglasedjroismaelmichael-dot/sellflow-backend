@@ -11,741 +11,643 @@ const chariowRoutes = require('./routes/chariow');
 const paymentsRoutes = require('./routes/payments');
 const webhooksRoutes = require('./routes/webhooks');
 
-/* =========================================================
-   APPLICATION
-========================================================= */
-
 const app = express();
 
 const PORT = Number(process.env.PORT) || 4000;
 const API_VERSION = '2.3.6';
 
 /* =========================================================
-   SUBSCRIPTIONS
+SUBSCRIPTIONS
 ========================================================= */
 
 let subscriptionRoutes = null;
 let startSubscriptionReminderWorker = null;
 
 try {
-  subscriptionRoutes = require('./routes/subscriptions');
-
-  console.log(
-    '✅ routes/subscriptions.js chargé.'
-  );
+subscriptionRoutes = require('./routes/subscriptions');
+console.log('✅ routes/subscriptions.js chargé.');
 } catch (error) {
-  console.log(
-    'ℹ️ routes/subscriptions.js non installé.'
-  );
+console.log('ℹ️ routes/subscriptions.js non installé.');
 }
 
 try {
-  const subscriptionService =
-    require('./services/subscriptions');
+const subscriptionService = require('./services/subscriptions');
 
-  if (
-    subscriptionService &&
-    typeof subscriptionService.startSubscriptionReminderWorker ===
-      'function'
-  ) {
-    startSubscriptionReminderWorker =
-      subscriptionService.startSubscriptionReminderWorker;
-  }
+if (
+subscriptionService &&
+typeof subscriptionService.startSubscriptionReminderWorker === 'function'
+) {
+startSubscriptionReminderWorker =
+subscriptionService.startSubscriptionReminderWorker;
+}
 } catch (error) {
-  console.log(
-    'ℹ️ services/subscriptions.js non installé.'
-  );
+console.log('ℹ️ services/subscriptions.js non installé.');
 }
 
 /* =========================================================
-   CORS
+CORS
 ========================================================= */
 
 const allowedOrigins = [
-  'https://sellflowic.netlify.app',
-  'https://www.sellflowic.netlify.app',
-
-  'https://sellflowme.netlify.app',
-  'https://www.sellflowme.netlify.app',
-
-  'http://localhost:3000',
-  'http://localhost:5173',
-
-  'http://127.0.0.1:3000',
-  'http://127.0.0.1:5173'
+'https://sellflowic.netlify.app',
+'https://www.sellflowic.netlify.app',
+'https://sellflowme.netlify.app',
+'https://www.sellflowme.netlify.app',
+'http://localhost:3000',
+'http://localhost:5173',
+'http://127.0.0.1:3000',
+'http://127.0.0.1:5173'
 ];
 
 if (process.env.FRONTEND_URL) {
-  allowedOrigins.push(
-    process.env.FRONTEND_URL
-  );
+allowedOrigins.push(process.env.FRONTEND_URL);
 }
 
 const normalizedAllowedOrigins = [
-  ...new Set(
-    allowedOrigins
-      .filter(Boolean)
-      .map(function (origin) {
-        return String(origin)
-          .trim()
-          .replace(/\/+$/, '')
-          .toLowerCase();
-      })
-  )
+...new Set(
+allowedOrigins
+.filter(Boolean)
+.map((origin) =>
+String(origin)
+.trim()
+.replace(//+$/, '')
+.toLowerCase()
+)
+)
 ];
 
 console.log(
-  '🌐 Origines CORS autorisées:',
-  normalizedAllowedOrigins
+'🌐 Origines CORS autorisées:',
+normalizedAllowedOrigins
 );
-
-/* =========================================================
-   VÉRIFICATION CORS
-========================================================= */
 
 function isAllowedOrigin(origin) {
-  if (!origin) {
-    return true;
-  }
-
-  const normalizedOrigin = String(origin)
-    .trim()
-    .replace(/\/+$/, '')
-    .toLowerCase();
-
-  if (
-    normalizedAllowedOrigins.includes(
-      normalizedOrigin
-    )
-  ) {
-    return true;
-  }
-
-  try {
-    const url =
-      new URL(normalizedOrigin);
-
-    if (
-      url.protocol === 'https:' &&
-      url.hostname.endsWith('.netlify.app')
-    ) {
-      const hostname =
-        url.hostname.toLowerCase();
-
-      if (
-        hostname.includes('sellflowic') ||
-        hostname.includes('sellflowme')
-      ) {
-        return true;
-      }
-    }
-  } catch (error) {
-    return false;
-  }
-
-  if (
-    normalizedOrigin.startsWith(
-      'http://localhost:'
-    ) ||
-    normalizedOrigin.startsWith(
-      'http://127.0.0.1:'
-    )
-  ) {
-    return true;
-  }
-
-  return false;
+if (!origin) {
+return true;
 }
 
-/* =========================================================
-   CONFIGURATION CORS
-========================================================= */
+const normalizedOrigin = String(origin)
+.trim()
+.replace(//+$/, '')
+.toLowerCase();
+
+if (normalizedAllowedOrigins.includes(normalizedOrigin)) {
+return true;
+}
+
+try {
+const url = new URL(normalizedOrigin);
+
+```
+if (
+  url.protocol === 'https:' &&
+  url.hostname.endsWith('.netlify.app')
+) {
+  const hostname = url.hostname.toLowerCase();
+
+  if (
+    hostname.includes('sellflowic') ||
+    hostname.includes('sellflowme')
+  ) {
+    return true;
+  }
+}
+```
+
+} catch (error) {
+return false;
+}
+
+if (
+normalizedOrigin.startsWith('http://localhost:') ||
+normalizedOrigin.startsWith('http://127.0.0.1:')
+) {
+return true;
+}
+
+return false;
+}
 
 const corsOptions = {
-  origin: function (origin, callback) {
-    if (isAllowedOrigin(origin)) {
-      return callback(null, true);
-    }
+origin: function (origin, callback) {
+if (isAllowedOrigin(origin)) {
+return callback(null, true);
+}
 
-    console.warn(
-      '⚠️ Origine CORS non reconnue:',
-      origin || 'Aucune origine'
-    );
+```
+console.warn(
+  '⚠️ Origine CORS non reconnue:',
+  origin || 'Aucune origine'
+);
 
-    return callback(null, false);
-  },
+return callback(null, false);
+```
 
-  methods: [
-    'GET',
-    'POST',
-    'PUT',
-    'PATCH',
-    'DELETE',
-    'OPTIONS'
-  ],
+},
 
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'X-Requested-With',
-    'Accept',
-    'Origin'
-  ],
+methods: [
+'GET',
+'POST',
+'PUT',
+'PATCH',
+'DELETE',
+'OPTIONS'
+],
 
-  exposedHeaders: [
-    'Content-Length',
-    'Content-Type'
-  ],
+allowedHeaders: [
+'Content-Type',
+'Authorization',
+'X-Requested-With',
+'Accept',
+'Origin'
+],
 
-  credentials: true,
+exposedHeaders: [
+'Content-Length',
+'Content-Type'
+],
 
-  optionsSuccessStatus: 204,
-
-  maxAge: 86400
+credentials: true,
+optionsSuccessStatus: 204,
+maxAge: 86400
 };
 
-app.use(
-  cors(corsOptions)
-);
+app.use(cors(corsOptions));
 
-app.options(
-  '*',
-  cors(corsOptions)
-);
+app.options('*', cors(corsOptions));
 
 /* =========================================================
-   WEBHOOKS MONEROO
+WEBHOOKS MONEROO
 ========================================================= */
 
 app.use(
-  '/webhooks',
-  webhooksRoutes
+'/webhooks',
+webhooksRoutes
 );
 
 /* =========================================================
-   BODY PARSERS
+BODY PARSERS
 ========================================================= */
 
 app.use(
-  express.json({
-    limit: '1mb'
-  })
+express.json({
+limit: '1mb'
+})
 );
 
 app.use(
-  express.urlencoded({
-    extended: true,
-    limit: '1mb'
-  })
+express.urlencoded({
+extended: true,
+limit: '1mb'
+})
 );
 
 /* =========================================================
-   ROOT
+ROOT
 ========================================================= */
 
 app.get(
-  '/',
-  function (req, res) {
-    return res.json({
-      name: 'SellFlow AI API',
+'/',
+function (req, res) {
+return res.json({
+name: 'SellFlow AI API',
+status: 'online',
+version: API_VERSION,
+emailService: 'disabled',
+resend: 'disabled',
 
-      status: 'online',
+```
+  frontend: {
+    current: 'https://sellflowic.netlify.app',
+    legacy: 'https://sellflowme.netlify.app'
+  },
 
-      version: API_VERSION,
-
-      emailService: 'disabled',
-
-      resend: 'disabled',
-
-      frontend: {
-        current:
-          'https://sellflowic.netlify.app',
-
-        legacy:
-          'https://sellflowme.netlify.app'
-      },
-
-      endpoints: {
-        health:
-          'GET /health',
-
-        auth:
-          '/auth',
-
-        testAuth:
-          'GET /test-auth',
-
-        chariow:
-          '/chariow',
-
-        subscriptions:
-          subscriptionRoutes
-            ? '/subscriptions'
-            : 'non installé',
-
-        payments:
-          '/payments',
-
-        webhooks:
-          '/webhooks'
-      }
-    });
+  endpoints: {
+    health: 'GET /health',
+    auth: '/auth',
+    testAuth: 'GET /test-auth',
+    chariow: '/chariow',
+    subscriptions: subscriptionRoutes
+      ? '/subscriptions'
+      : 'non installé',
+    payments: '/payments',
+    webhooks: '/webhooks'
   }
+});
+```
+
+}
 );
 
 /* =========================================================
-   HEALTH
+HEALTH
 ========================================================= */
 
 app.get(
-  '/health',
-  async function (req, res) {
-    try {
-      const result =
-        await database.testDatabaseConnection();
+'/health',
+async function (req, res) {
+try {
+const result =
+await database.testDatabaseConnection();
 
-      return res.json({
-        ok: true,
+```
+  return res.json({
+    ok: true,
+    service: 'sellflow-backend',
+    version: API_VERSION,
+    database: result.connected
+      ? 'connected'
+      : 'disconnected',
+    time: new Date().toISOString()
+  });
+} catch (error) {
+  console.error(
+    '❌ Erreur PostgreSQL:',
+    error
+  );
 
-        service:
-          'sellflow-backend',
+  return res.status(500).json({
+    ok: false,
+    service: 'sellflow-backend',
+    version: API_VERSION,
+    database: 'disconnected',
+    error: error.message
+  });
+}
+```
 
-        version:
-          API_VERSION,
-
-        database:
-          result.connected
-            ? 'connected'
-            : 'disconnected',
-
-        time:
-          new Date().toISOString()
-      });
-    } catch (error) {
-      console.error(
-        '❌ Erreur PostgreSQL:',
-        error
-      );
-
-      return res.status(500).json({
-        ok: false,
-
-        service:
-          'sellflow-backend',
-
-        version:
-          API_VERSION,
-
-        database:
-          'disconnected',
-
-        error:
-          error.message
-      });
-    }
-  }
+}
 );
 
 /* =========================================================
-   AUTH
+AUTH
 ========================================================= */
 
 app.use(
-  '/auth',
-  authRoutes
+'/auth',
+authRoutes
 );
 
 /* =========================================================
-   CHARIOW
+CHARIOW
 ========================================================= */
 
 app.use(
-  '/chariow',
-  chariowRoutes
+'/chariow',
+chariowRoutes
 );
 
 /* =========================================================
-   SUBSCRIPTIONS
+SUBSCRIPTIONS
 ========================================================= */
 
 if (subscriptionRoutes) {
-  app.use(
-    '/subscriptions',
-    subscriptionRoutes
-  );
+app.use(
+'/subscriptions',
+subscriptionRoutes
+);
 }
 
 /* =========================================================
-   PAYMENTS
+PAYMENTS
 ========================================================= */
 
 app.use(
-  '/payments',
-  paymentsRoutes
+'/payments',
+paymentsRoutes
 );
 
 /* =========================================================
-   TEST AUTH
+TEST AUTH
 ========================================================= */
 
 app.get(
-  '/test-auth',
-  async function (req, res) {
-    try {
-      const db =
-        database.getPool();
+'/test-auth',
+async function (req, res) {
+try {
+const db =
+database.getPool();
 
-      await db.query(
-        'SELECT 1'
-      );
+```
+  await db.query('SELECT 1');
 
-      /*
-       * IMPORTANT :
-       * Pas de template literal ici.
-       * La requête SQL est une simple chaîne JavaScript.
-       */
-      const tableCheck =
-        await db.query(
-          "SELECT to_regclass('public.registration_requests') AS table_name"
-        );
-
-      return res.json({
-        ok: true,
-
-        authRoutes:
-          'enabled',
-
-        database:
-          'connected',
-
-        registrationRequestsTable:
-          tableCheck.rows[0] &&
-          tableCheck.rows[0].table_name
-            ? 'exists'
-            : 'missing',
-
-        chariowRoutes:
-          'enabled',
-
-        paymentRoutes:
-          'enabled',
-
-        monerooWebhook:
-          'enabled',
-
-        subscriptionRoutes:
-          subscriptionRoutes
-            ? 'enabled'
-            : 'not-installed',
-
-        emailService:
-          'disabled',
-
-        resend:
-          'disabled',
-
-        cors:
-          normalizedAllowedOrigins
-      });
-    } catch (error) {
-      console.error(
-        '❌ Erreur test-auth:',
-        error
-      );
-
-      return res.status(500).json({
-        ok: false,
-
-        error:
-          error.message
-      });
-    }
-  }
-);
-
-/* =========================================================
-   404
-========================================================= */
-
-app.use(
-  function (req, res) {
-    return res.status(404).json({
-      ok: false,
-
-      error:
-        'ROUTE_NOT_FOUND',
-
-      message:
-        'Route introuvable.'
-    });
-  }
-);
-
-/* =========================================================
-   ERROR HANDLER
-========================================================= */
-
-app.use(
-  function (err, req, res, next) {
-    console.error(
-      '❌ Erreur serveur:',
-      err
+  const tableCheck =
+    await db.query(
+      "SELECT to_regclass('public.registration_requests') AS table_name"
     );
 
-    if (res.headersSent) {
-      return next(err);
-    }
+  return res.json({
+    ok: true,
 
-    return res.status(
-      err.status || 500
-    ).json({
-      ok: false,
+    authRoutes: 'enabled',
 
-      error:
-        'SERVER_ERROR',
+    database: 'connected',
 
-      message:
-        err.message ||
-        'Erreur serveur.'
-    });
-  }
+    registrationRequestsTable:
+      tableCheck.rows[0] &&
+      tableCheck.rows[0].table_name
+        ? 'exists'
+        : 'missing',
+
+    chariowRoutes: 'enabled',
+
+    paymentRoutes: 'enabled',
+
+    monerooWebhook: 'enabled',
+
+    subscriptionRoutes:
+      subscriptionRoutes
+        ? 'enabled'
+        : 'not-installed',
+
+    emailService: 'disabled',
+
+    resend: 'disabled',
+
+    cors: normalizedAllowedOrigins
+  });
+} catch (error) {
+  console.error(
+    '❌ Erreur test-auth:',
+    error
+  );
+
+  return res.status(500).json({
+    ok: false,
+    error: error.message
+  });
+}
+```
+
+}
 );
 
 /* =========================================================
-   DÉMARRAGE
+404
+========================================================= */
+
+app.use(
+function (req, res) {
+return res.status(404).json({
+ok: false,
+error: 'ROUTE_NOT_FOUND',
+message: 'Route introuvable.'
+});
+}
+);
+
+/* =========================================================
+ERROR HANDLER
+========================================================= */
+
+app.use(
+function (err, req, res, next) {
+console.error(
+'❌ Erreur serveur:',
+err
+);
+
+```
+if (res.headersSent) {
+  return next(err);
+}
+
+return res.status(
+  err.status || 500
+).json({
+  ok: false,
+  error: 'SERVER_ERROR',
+  message:
+    err.message ||
+    'Erreur serveur.'
+});
+```
+
+}
+);
+
+/* =========================================================
+START SERVER
 ========================================================= */
 
 async function startServer() {
-  try {
-    console.log(
-      '======================================'
+try {
+console.log(
+'======================================'
+);
+
+```
+console.log(
+  '🚀 Démarrage de SellFlow AI'
+);
+
+console.log(
+  '📦 Version API:',
+  API_VERSION
+);
+
+console.log(
+  '======================================'
+);
+
+console.log(
+  '🔌 Connexion à PostgreSQL...'
+);
+
+const databaseStatus =
+  await database.testDatabaseConnection();
+
+if (
+  !databaseStatus ||
+  !databaseStatus.connected
+) {
+  throw new Error(
+    'Connexion PostgreSQL impossible.'
+  );
+}
+
+console.log(
+  '✅ PostgreSQL connecté.'
+);
+
+console.log(
+  '🗄️ Initialisation de la base de données...'
+);
+
+await databaseInit.initDatabase();
+
+console.log(
+  '✅ Base de données prête.'
+);
+
+const server =
+  app.listen(
+    PORT,
+    '0.0.0.0',
+    function () {
+      console.log(
+        '======================================'
+      );
+
+      console.log(
+        '✅ SELLFLOW API DÉMARRÉE'
+      );
+
+      console.log(
+        '🌐 Port:',
+        PORT
+      );
+
+      console.log(
+        '📦 Version API:',
+        API_VERSION
+      );
+
+      console.log(
+        '🔐 Authentification: ACTIVÉE'
+      );
+
+      console.log(
+        '🛍️ Chariow: ACTIVÉ'
+      );
+
+      console.log(
+        '💳 Moneroo: ACTIVÉ'
+      );
+
+      console.log(
+        '🔔 Webhook Moneroo: ACTIVÉ'
+      );
+
+      console.log(
+        '📧 Service email: DÉSACTIVÉ'
+      );
+
+      console.log(
+        '🚫 Resend: DÉSACTIVÉ'
+      );
+
+      console.log(
+        '🌐 Frontend:',
+        'https://sellflowic.netlify.app'
+      );
+
+      if (subscriptionRoutes) {
+        console.log(
+          '📅 Abonnements: ACTIVÉS'
+        );
+      } else {
+        console.log(
+          '📅 Abonnements: NON INSTALLÉS'
+        );
+      }
+
+      console.log(
+        '======================================'
+      );
+
+      if (
+        typeof startSubscriptionReminderWorker ===
+        'function'
+      ) {
+        try {
+          startSubscriptionReminderWorker();
+
+          console.log(
+            '⏰ Worker abonnements démarré.'
+          );
+        } catch (workerError) {
+          console.error(
+            '❌ Erreur worker abonnements:',
+            workerError
+          );
+        }
+      }
+    }
+  );
+
+server.on(
+  'error',
+  function (error) {
+    console.error(
+      '❌ Erreur serveur HTTP:',
+      error
     );
-
-    console.log(
-      '🚀 Démarrage de SellFlow AI'
-    );
-
-    console.log(
-      '📦 Version API:',
-      API_VERSION
-    );
-
-    console.log(
-      '======================================'
-    );
-
-    /* -----------------------------------
-       POSTGRESQL
-    ----------------------------------- */
-
-    console.log(
-      '🔌 Connexion à PostgreSQL...'
-    );
-
-    const databaseStatus =
-      await database.testDatabaseConnection();
 
     if (
-      !databaseStatus ||
-      !databaseStatus.connected
+      error.code === 'EADDRINUSE'
     ) {
-      throw new Error(
-        'Connexion PostgreSQL impossible.'
+      console.error(
+        '❌ Le port ' +
+        PORT +
+        ' est déjà utilisé.'
       );
     }
 
-    console.log(
-      '✅ PostgreSQL connecté.'
-    );
-
-    /* -----------------------------------
-       INITIALISATION DATABASE
-    ----------------------------------- */
-
-    console.log(
-      '🗄️ Initialisation de la base de données...'
-    );
-
-    await databaseInit.initDatabase();
-
-    console.log(
-      '✅ Base de données prête.'
-    );
-
-    /* -----------------------------------
-       HTTP SERVER
-    ----------------------------------- */
-
-    const server =
-      app.listen(
-        PORT,
-        '0.0.0.0',
-        function () {
-          console.log(
-            '======================================'
-          );
-
-          console.log(
-            '✅ SELLFLOW API DÉMARRÉE'
-          );
-
-          console.log(
-            '🌐 Port:',
-            PORT
-          );
-
-          console.log(
-            '📦 Version API:',
-            API_VERSION
-          );
-
-          console.log(
-            '🔐 Authentification: ACTIVÉE'
-          );
-
-          console.log(
-            '🛍️ Chariow: ACTIVÉ'
-          );
-
-          console.log(
-            '💳 Moneroo: ACTIVÉ'
-          );
-
-          console.log(
-            '🔔 Webhook Moneroo: ACTIVÉ'
-          );
-
-          console.log(
-            '📧 Service email: DÉSACTIVÉ'
-          );
-
-          console.log(
-            '🚫 Resend: DÉSACTIVÉ'
-          );
-
-          console.log(
-            '🌐 Frontend:',
-            'https://sellflowic.netlify.app'
-          );
-
-          if (subscriptionRoutes) {
-            console.log(
-              '📅 Abonnements: ACTIVÉS'
-            );
-          } else {
-            console.log(
-              '📅 Abonnements: NON INSTALLÉS'
-            );
-          }
-
-          console.log(
-            '======================================'
-          );
-
-          /* -----------------------------
-             WORKER ABONNEMENTS
-          ----------------------------- */
-
-          if (
-            typeof startSubscriptionReminderWorker ===
-            'function'
-          ) {
-            try {
-              startSubscriptionReminderWorker();
-
-              console.log(
-                '⏰ Worker abonnements démarré.'
-              );
-            } catch (workerError) {
-              console.error(
-                '❌ Erreur worker abonnements:',
-                workerError
-              );
-            }
-          }
-        }
-      );
-
-    /* -----------------------------------
-       SERVER ERROR
-    ----------------------------------- */
-
-    server.on(
-      'error',
-      function (error) {
-        console.error(
-          '❌ Erreur serveur HTTP:',
-          error
-        );
-
-        if (
-          error.code === 'EADDRINUSE'
-        ) {
-          console.error(
-            '❌ Le port ' +
-            PORT +
-            ' est déjà utilisé.'
-          );
-        }
-
-        process.exit(1);
-      }
-    );
-
-  } catch (error) {
-    console.error(
-      '======================================'
-    );
-
-    console.error(
-      '❌ IMPOSSIBLE DE DÉMARRER SELLFLOW'
-    );
-
-    console.error(
-      '======================================'
-    );
-
-    console.error(
-      error
-    );
-
-    console.error(
-      '======================================'
-    );
-
     process.exit(1);
   }
+);
+```
+
+} catch (error) {
+console.error(
+'======================================'
+);
+
+```
+console.error(
+  '❌ IMPOSSIBLE DE DÉMARRER SELLFLOW'
+);
+
+console.error(
+  '======================================'
+);
+
+console.error(
+  error
+);
+
+console.error(
+  '======================================'
+);
+
+process.exit(1);
+```
+
+}
 }
 
 /* =========================================================
-   PROCESS ERRORS
+PROCESS ERRORS
 ========================================================= */
 
 process.on(
-  'unhandledRejection',
-  function (reason) {
-    console.error(
-      '❌ Unhandled Promise Rejection:',
-      reason
-    );
-  }
+'unhandledRejection',
+function (reason) {
+console.error(
+'❌ Unhandled Promise Rejection:',
+reason
+);
+}
 );
 
 process.on(
-  'uncaughtException',
-  function (error) {
-    console.error(
-      '❌ Uncaught Exception:',
-      error
-    );
+'uncaughtException',
+function (error) {
+console.error(
+'❌ Uncaught Exception:',
+error
+);
 
-    process.exit(1);
-  }
+```
+process.exit(1);
+```
+
+}
 );
 
 /* =========================================================
-   START
+START
 ========================================================= */
 
 startServer();
-```
