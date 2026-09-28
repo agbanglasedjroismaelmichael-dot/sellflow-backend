@@ -19,7 +19,7 @@ const webhooksRoutes = require('./routes/webhooks');
 const app = express();
 
 const PORT = Number(process.env.PORT) || 4000;
-const API_VERSION = '2.3.5';
+const API_VERSION = '2.3.6';
 
 /* =========================================================
    SUBSCRIPTIONS
@@ -31,9 +31,13 @@ let startSubscriptionReminderWorker = null;
 try {
   subscriptionRoutes = require('./routes/subscriptions');
 
-  console.log('✅ routes/subscriptions.js chargé.');
+  console.log(
+    '✅ routes/subscriptions.js chargé.'
+  );
 } catch (error) {
-  console.log('ℹ️ routes/subscriptions.js non installé.');
+  console.log(
+    'ℹ️ routes/subscriptions.js non installé.'
+  );
 }
 
 try {
@@ -49,7 +53,9 @@ try {
       subscriptionService.startSubscriptionReminderWorker;
   }
 } catch (error) {
-  console.log('ℹ️ services/subscriptions.js non installé.');
+  console.log(
+    'ℹ️ services/subscriptions.js non installé.'
+  );
 }
 
 /* =========================================================
@@ -70,19 +76,12 @@ const allowedOrigins = [
   'http://127.0.0.1:5173'
 ];
 
-/*
- * FRONTEND_URL peut être ajouté dans les variables
- * d'environnement de Render.
- */
 if (process.env.FRONTEND_URL) {
   allowedOrigins.push(
     process.env.FRONTEND_URL
   );
 }
 
-/*
- * Nettoyage et normalisation des origines.
- */
 const normalizedAllowedOrigins = [
   ...new Set(
     allowedOrigins
@@ -106,16 +105,6 @@ console.log(
 ========================================================= */
 
 function isAllowedOrigin(origin) {
-  /*
-   * Les requêtes sans Origin sont autorisées.
-   *
-   * Cela concerne notamment :
-   * - Render
-   * - curl
-   * - Postman
-   * - monitoring
-   * - appels serveur à serveur
-   */
   if (!origin) {
     return true;
   }
@@ -125,9 +114,6 @@ function isAllowedOrigin(origin) {
     .replace(/\/+$/, '')
     .toLowerCase();
 
-  /*
-   * Origine explicitement autorisée.
-   */
   if (
     normalizedAllowedOrigins.includes(
       normalizedOrigin
@@ -136,10 +122,6 @@ function isAllowedOrigin(origin) {
     return true;
   }
 
-  /*
-   * Autoriser uniquement les sous-domaines Netlify
-   * appartenant au projet SellFlow.
-   */
   try {
     const url =
       new URL(normalizedOrigin);
@@ -162,9 +144,6 @@ function isAllowedOrigin(origin) {
     return false;
   }
 
-  /*
-   * Développement local.
-   */
   if (
     normalizedOrigin.startsWith(
       'http://localhost:'
@@ -194,12 +173,6 @@ const corsOptions = {
       origin || 'Aucune origine'
     );
 
-    /*
-     * Ne pas générer d'exception.
-     *
-     * Cela évite le crash :
-     * "Origine CORS non autorisée."
-     */
     return callback(null, false);
   },
 
@@ -236,10 +209,6 @@ app.use(
   cors(corsOptions)
 );
 
-/* =========================================================
-   OPTIONS / PREFLIGHT
-========================================================= */
-
 app.options(
   '*',
   cors(corsOptions)
@@ -249,10 +218,6 @@ app.options(
    WEBHOOKS MONEROO
 ========================================================= */
 
-/*
- * IMPORTANT :
- * Cette route est enregistrée AVANT express.json().
- */
 app.use(
   '/webhooks',
   webhooksRoutes
@@ -276,7 +241,7 @@ app.use(
 );
 
 /* =========================================================
-   ROUTE RACINE
+   ROOT
 ========================================================= */
 
 app.get(
@@ -424,14 +389,6 @@ app.use(
    TEST AUTH
 ========================================================= */
 
-/*
- * Cette route sert uniquement au diagnostic.
- *
- * Elle ne crée aucun compte.
- * Elle ne vérifie aucun email.
- * Elle n'utilise pas Resend.
- */
-
 app.get(
   '/test-auth',
   async function (req, res) {
@@ -439,26 +396,19 @@ app.get(
       const db =
         database.getPool();
 
-      /*
-       * Test PostgreSQL.
-       */
       await db.query(
         'SELECT 1'
       );
 
       /*
-       * Vérification de la table.
-       *
        * IMPORTANT :
-       * Les backticks commencent AVANT SELECT
-       * et se terminent APRÈS table_name.
+       * Pas de template literal ici.
+       * La requête SQL est une simple chaîne JavaScript.
        */
       const tableCheck =
-        await db.query(`
-          SELECT to_regclass(
-            'public.registration_requests'
-          ) AS table_name
-        `);
+        await db.query(
+          "SELECT to_regclass('public.registration_requests') AS table_name"
+        );
 
       return res.json({
         ok: true,
@@ -563,7 +513,7 @@ app.use(
 );
 
 /* =========================================================
-   DÉMARRAGE DU SERVEUR
+   DÉMARRAGE
 ========================================================= */
 
 async function startServer() {
@@ -586,7 +536,7 @@ async function startServer() {
     );
 
     /* -----------------------------------
-       CONNEXION DATABASE
+       POSTGRESQL
     ----------------------------------- */
 
     console.log(
@@ -624,7 +574,7 @@ async function startServer() {
     );
 
     /* -----------------------------------
-       DÉMARRAGE HTTP
+       HTTP SERVER
     ----------------------------------- */
 
     const server =
@@ -718,7 +668,7 @@ async function startServer() {
       );
 
     /* -----------------------------------
-       ERREUR SERVEUR HTTP
+       SERVER ERROR
     ----------------------------------- */
 
     server.on(
@@ -733,7 +683,9 @@ async function startServer() {
           error.code === 'EADDRINUSE'
         ) {
           console.error(
-            `❌ Le port ${PORT} est déjà utilisé.`
+            '❌ Le port ' +
+            PORT +
+            ' est déjà utilisé.'
           );
         }
 
