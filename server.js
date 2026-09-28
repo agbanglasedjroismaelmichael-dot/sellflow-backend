@@ -11,14 +11,10 @@ const chariowRoutes = require('./routes/chariow');
 const paymentsRoutes = require('./routes/payments');
 const webhooksRoutes = require('./routes/webhooks');
 
-/* =========================================================
-APPLICATION
-========================================================= */
-
 const app = express();
 
 const PORT = Number(process.env.PORT) || 4000;
-const API_VERSION = '2.3.6';
+const API_VERSION = '2.3.7';
 
 /* =========================================================
 SUBSCRIPTIONS
@@ -30,13 +26,18 @@ let startSubscriptionReminderWorker = null;
 try {
 subscriptionRoutes = require('./routes/subscriptions');
 
-console.log('✅ routes/subscriptions.js chargé.');
+console.log(
+'✅ routes/subscriptions.js chargé.'
+);
 } catch (error) {
-console.log('ℹ️ routes/subscriptions.js non installé.');
+console.log(
+'ℹ️ routes/subscriptions.js non installé.'
+);
 }
 
 try {
-const subscriptionService = require('./services/subscriptions');
+const subscriptionService =
+require('./services/subscriptions');
 
 if (
 subscriptionService &&
@@ -45,9 +46,18 @@ typeof subscriptionService.startSubscriptionReminderWorker ===
 ) {
 startSubscriptionReminderWorker =
 subscriptionService.startSubscriptionReminderWorker;
+
+```
+console.log(
+  '✅ Worker abonnements disponible.'
+);
+```
+
 }
 } catch (error) {
-console.log('ℹ️ services/subscriptions.js non installé.');
+console.log(
+'ℹ️ services/subscriptions.js non installé.'
+);
 }
 
 /* =========================================================
@@ -66,7 +76,9 @@ const allowedOrigins = [
 ];
 
 if (process.env.FRONTEND_URL) {
-allowedOrigins.push(process.env.FRONTEND_URL);
+allowedOrigins.push(
+process.env.FRONTEND_URL
+);
 }
 
 const normalizedAllowedOrigins = [
@@ -96,7 +108,8 @@ if (!origin) {
 return true;
 }
 
-const normalizedOrigin = String(origin)
+const normalizedOrigin =
+String(origin)
 .trim()
 .replace(//+$/, '')
 .toLowerCase();
@@ -110,18 +123,26 @@ return true;
 }
 
 try {
-const url = new URL(normalizedOrigin);
+const url =
+new URL(normalizedOrigin);
 
 ```
 if (
   url.protocol === 'https:' &&
-  url.hostname.endsWith('.netlify.app')
+  url.hostname.endsWith(
+    '.netlify.app'
+  )
 ) {
-  const hostname = url.hostname.toLowerCase();
+  const hostname =
+    url.hostname.toLowerCase();
 
   if (
-    hostname.includes('sellflowic') ||
-    hostname.includes('sellflowme')
+    hostname.includes(
+      'sellflowic'
+    ) ||
+    hostname.includes(
+      'sellflowme'
+    )
   ) {
     return true;
   }
@@ -152,8 +173,13 @@ CONFIGURATION CORS
 
 const corsOptions = {
 origin: function (origin, callback) {
-if (isAllowedOrigin(origin)) {
-return callback(null, true);
+if (
+isAllowedOrigin(origin)
+) {
+return callback(
+null,
+true
+);
 }
 
 ```
@@ -162,7 +188,10 @@ console.warn(
   origin || 'Aucune origine'
 );
 
-return callback(null, false);
+return callback(
+  null,
+  false
+);
 ```
 
 },
@@ -310,6 +339,7 @@ await database.testDatabaseConnection();
       API_VERSION,
 
     database:
+      result &&
       result.connected
         ? 'connected'
         : 'disconnected',
@@ -323,7 +353,9 @@ await database.testDatabaseConnection();
     error
   );
 
-  return res.status(500).json({
+  return res.status(
+    500
+  ).json({
     ok: false,
 
     service:
@@ -366,7 +398,9 @@ chariowRoutes
 SUBSCRIPTIONS
 ========================================================= */
 
-if (subscriptionRoutes) {
+if (
+subscriptionRoutes
+) {
 app.use(
 '/subscriptions',
 subscriptionRoutes
@@ -398,11 +432,6 @@ database.getPool();
     'SELECT 1'
   );
 
-  const tableCheck =
-    await db.query(
-      "SELECT to_regclass('public.registration_requests') AS table_name"
-    );
-
   return res.json({
     ok: true,
 
@@ -411,12 +440,6 @@ database.getPool();
 
     database:
       'connected',
-
-    registrationRequestsTable:
-      tableCheck.rows[0] &&
-      tableCheck.rows[0].table_name
-        ? 'exists'
-        : 'missing',
 
     chariowRoutes:
       'enabled',
@@ -447,7 +470,9 @@ database.getPool();
     error
   );
 
-  return res.status(500).json({
+  return res.status(
+    500
+  ).json({
     ok: false,
 
     error:
@@ -465,7 +490,9 @@ database.getPool();
 
 app.use(
 function (req, res) {
-return res.status(404).json({
+return res.status(
+404
+).json({
 ok: false,
 
 ```
@@ -485,14 +512,21 @@ ERROR HANDLER
 ========================================================= */
 
 app.use(
-function (err, req, res, next) {
+function (
+err,
+req,
+res,
+next
+) {
 console.error(
 '❌ Erreur serveur:',
 err
 );
 
 ```
-if (res.headersSent) {
+if (
+  res.headersSent
+) {
   return next(err);
 }
 
@@ -631,7 +665,9 @@ const server =
         'https://sellflowic.netlify.app'
       );
 
-      if (subscriptionRoutes) {
+      if (
+        subscriptionRoutes
+      ) {
         console.log(
           '📅 Abonnements: ACTIVÉS'
         );
@@ -682,7 +718,8 @@ server.on(
     );
 
     if (
-      error.code === 'EADDRINUSE'
+      error.code ===
+      'EADDRINUSE'
     ) {
       console.error(
         '❌ Le port ' +
