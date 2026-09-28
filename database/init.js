@@ -29,7 +29,7 @@ async function initDatabase() {
 
       password_hash TEXT,
 
-      email_verified BOOLEAN NOT NULL DEFAULT FALSE,
+      email_verified BOOLEAN NOT NULL DEFAULT TRUE,
 
       plan VARCHAR(50) NOT NULL DEFAULT 'free',
 
@@ -79,7 +79,7 @@ async function initDatabase() {
 
     ALTER TABLE users
       ADD COLUMN IF NOT EXISTS email_verified
-        BOOLEAN NOT NULL DEFAULT FALSE;
+        BOOLEAN NOT NULL DEFAULT TRUE;
 
     ALTER TABLE users
       ADD COLUMN IF NOT EXISTS plan
@@ -125,21 +125,6 @@ async function initDatabase() {
   // =====================================================
   // NORMALISATION DES EMAILS EXISTANTS
   // =====================================================
-  //
-  // Tous les anciens emails sont normalisés :
-  //
-  // " Test@Gmail.com "
-  //
-  // devient :
-  //
-  // "test@gmail.com"
-  //
-  // ATTENTION :
-  // si deux comptes existants possèdent le même email
-  // après normalisation, l'index unique ci-dessous
-  // sera volontairement bloqué afin de ne supprimer
-  // aucun compte automatiquement.
-  // =====================================================
 
   await db.query(`
     UPDATE users
@@ -148,14 +133,8 @@ async function initDatabase() {
   `);
 
   // =====================================================
-  // EMAIL VERIFICATION
-  // =====================================================
-  //
-  // Cette table est conservée pour compatibilité avec
-  // l'ancienne version de SellFlow.
-  //
-  // L'inscription actuelle NE l'utilise plus.
-  // Resend n'est plus utilisé.
+  // ANCIENNE TABLE EMAIL
+  // CONSERVÉE POUR COMPATIBILITÉ
   // =====================================================
 
   await db.query(`
@@ -183,13 +162,7 @@ async function initDatabase() {
 
   // =====================================================
   // REGISTRATION REQUESTS
-  // =====================================================
-  //
-  // Conservée pour compatibilité avec l'ancienne
-  // architecture.
-  //
-  // La nouvelle inscription directe n'utilise plus
-  // cette table.
+  // CONSERVÉE POUR COMPATIBILITÉ
   // =====================================================
 
   await db.query(`
@@ -341,7 +314,7 @@ async function initDatabase() {
   `);
 
   // =====================================================
-  // CHARIOW MULTI-BOUTIQUES
+  // CHARIOW
   // =====================================================
 
   await db.query(`
@@ -449,37 +422,24 @@ async function initDatabase() {
   // =====================================================
   // UNICITÉ RÉELLE DES EMAILS
   // =====================================================
-  //
-  // Un seul compte par adresse e-mail.
-  //
-  // Les variantes suivantes sont considérées comme
-  // identiques :
-  //
-  // Test@Email.com
-  // test@email.com
-  //  TEST@EMAIL.COM
-  // test@email.com
-  //
-  // PostgreSQL bloquera donc le deuxième compte.
-  // =====================================================
 
   try {
-
     await db.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_idx
         ON users (LOWER(TRIM(email)));
     `);
 
+    console.log(
+      '✅ Unicité des emails activée.'
+    );
   } catch (error) {
-
     if (error && error.code === '23505') {
-
       console.error('');
       console.error(
         '===================================================='
       );
       console.error(
-        '❌ DOUBLON D''EMAIL DÉTECTÉ DANS LA BASE'
+        "❌ DOUBLON D'EMAIL DÉTECTÉ DANS LA BASE"
       );
       console.error(
         '===================================================='
@@ -490,35 +450,23 @@ async function initDatabase() {
       console.error(
         'après normalisation majuscules/espaces.'
       );
-      console.error('');
       console.error(
-        'Aucun compte n''a été supprimé automatiquement.'
+        'Aucun compte n’a été supprimé automatiquement.'
       );
       console.error(
-        'Il faut identifier les doublons avant de créer'
-      );
-      console.error(
-        'l''index unique.'
+        'Supprime ou fusionne les doublons avant de relancer.'
       );
       console.error(
         '===================================================='
       );
       console.error('');
-
     }
 
     throw error;
   }
 
   // =====================================================
-  // INDEX UNIQUE NORMAL SUR EMAIL
-  // =====================================================
-  //
-  // La colonne email était déjà UNIQUE dans les anciennes
-  // versions de la base.
-  //
-  // L'index fonctionnel ci-dessus ajoute la protection
-  // contre les différences de casse et d'espaces.
+  // FIN
   // =====================================================
 
   console.log(
@@ -530,15 +478,15 @@ async function initDatabase() {
   );
 
   console.log(
-    '✅ Unicité des emails activée.'
-  );
-
-  console.log(
     '✅ Emails normalisés automatiquement.'
   );
 
   console.log(
-    '✅ Vérification email désactivée.'
+    '✅ Inscription directe activée.'
+  );
+
+  console.log(
+    '✅ Vérification email non requise.'
   );
 
   console.log(
@@ -546,11 +494,16 @@ async function initDatabase() {
   );
 
   console.log(
+    '✅ Connexion Chariow persistante.'
+  );
+
+  console.log(
     '=============================================='
   );
+
+  return true;
 }
 
 module.exports = {
   initDatabase
 };
-```
