@@ -20,8 +20,7 @@ let subscriptionRoutes = null;
 let startSubscriptionReminderWorker = null;
 
 try {
-  subscriptionRoutes =
-    require('./routes/subscriptions');
+  subscriptionRoutes = require('./routes/subscriptions');
 } catch (error) {
   console.log(
     'ℹ️ routes/subscriptions.js non installé pour le moment.'
@@ -61,52 +60,175 @@ const API_VERSION = '2.3.1';
    CORS
 ========================= */
 
+/*
+ * Domaines autorisés pour le frontend SellFlow.
+ *
+ * IMPORTANT :
+ * Le nouveau frontend Netlify est :
+ * https://sellflowic.netlify.app
+ *
+ * L'ancien frontend reste autorisé :
+ * https://sellflowme.netlify.app
+ */
+
 const allowedOrigins = [
+  'https://sellflowic.netlify.app',
   'https://sellflowme.netlify.app',
+
+  // Développement local
   'http://localhost:3000',
-  'http://localhost:5173'
+  'http://localhost:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173'
 ];
 
+/*
+ * Permet éventuellement d'ajouter une origine
+ * depuis les variables d'environnement Render.
+ *
+ * Exemple Render :
+ * FRONTEND_URL=https://sellflowic.netlify.app
+ */
+
+if (process.env.FRONTEND_URL) {
+  const frontendUrl =
+    process.env.FRONTEND_URL.trim().replace(/\/$/, '');
+
+  if (
+    frontendUrl &&
+    !allowedOrigins.includes(frontendUrl)
+  ) {
+    allowedOrigins.push(frontendUrl);
+  }
+}
+
+/*
+ * Supprime les doublons.
+ */
+const uniqueAllowedOrigins = [
+  ...new Set(allowedOrigins)
+];
+
+console.log(
+  '🌐 Origines CORS autorisées:',
+  uniqueAllowedOrigins
+);
+
+/*
+ * Configuration CORS.
+ *
+ * Le middleware cors gère également les requêtes
+ * OPTIONS / preflight utilisées par fetch().
+ */
+
+const corsOptions = {
+  origin: function (origin, callback) {
+
+    /*
+     * Requêtes sans Origin :
+     * Postman, curl, certains health checks,
+     * services internes, etc.
+     */
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    /*
+     * En développement, on autorise les origines
+     * afin de faciliter les tests locaux.
+     */
+    if (
+      process.env.NODE_ENV !== 'production'
+    ) {
+      return callback(null, true);
+    }
+
+    /*
+     * Vérification de l'origine autorisée.
+     */
+    if (
+      uniqueAllowedOrigins.includes(origin)
+    ) {
+      return callback(null, true);
+    }
+
+    console.warn(
+      '⚠️ Origine CORS refusée:',
+      origin
+    );
+
+    return callback(
+      new Error(
+        'Origine CORS non autorisée: ' +
+        origin
+      )
+    );
+  },
+
+  methods: [
+    'GET',
+    'POST',
+    'PUT',
+    'PATCH',
+    'DELETE',
+    'OPTIONS'
+  ],
+
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin'
+  ],
+
+  exposedHeaders: [
+    'Content-Length',
+    'Content-Type'
+  ],
+
+  credentials: true,
+
+  optionsSuccessStatus: 204,
+
+  maxAge: 86400
+};
+
+/*
+ * CORS global.
+ *
+ * IMPORTANT :
+ * Cette ligne doit être placée AVANT les routes.
+ * Elle permet notamment de traiter :
+ *
+ * OPTIONS /auth/login
+ * OPTIONS /auth/register/...
+ * OPTIONS /subscriptions/me
+ * OPTIONS /chariow/...
+ * etc.
+ */
+
 app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Autoriser les requêtes sans origin
-      // (Postman, Render health checks, etc.)
-      if (!origin) {
-        return callback(null, true);
-      }
+  cors(corsOptions)
+);
 
-      // En développement, autoriser toutes les origines
-      if (process.env.NODE_ENV !== 'production') {
-        return callback(null, true);
-      }
+/*
+ * Réponse supplémentaire pour les requêtes OPTIONS.
+ *
+ * Le middleware cors principal gère déjà le preflight.
+ * Cette route permet de s'assurer qu'une requête OPTIONS
+ * reçue par l'application est correctement terminée.
+ */
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+app.use(
+  function (req, res, next) {
 
-      return callback(
-        new Error('Origine CORS non autorisée.')
-      );
-    },
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(204);
+    }
 
-    methods: [
-      'GET',
-      'POST',
-      'PUT',
-      'PATCH',
-      'DELETE',
-      'OPTIONS'
-    ],
-
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'X-Requested-With'
-    ],
-
-    credentials: true
-  })
+    next();
+  }
 );
 
 /*
@@ -160,6 +282,14 @@ app.get(
       status: 'online',
 
       version: API_VERSION,
+
+      frontend: {
+        current:
+          'https://sellflowic.netlify.app',
+
+        legacy:
+          'https://sellflowme.netlify.app'
+      },
 
       endpoints: {
         health:
@@ -233,6 +363,7 @@ app.get(
   '/health',
   async function (req, res) {
     try {
+
       const result =
         await database.testDatabaseConnection();
 
@@ -255,6 +386,7 @@ app.get(
       });
 
     } catch (error) {
+
       console.error(
         '❌ Erreur PostgreSQL:',
         error
@@ -302,10 +434,12 @@ app.use(
 ========================= */
 
 if (subscriptionRoutes) {
+
   app.use(
     '/subscriptions',
     subscriptionRoutes
   );
+
 }
 
 /* =========================
@@ -324,7 +458,9 @@ app.use(
 app.get(
   '/test-auth',
   async function (req, res) {
+
     try {
+
       const db =
         database.getPool();
 
@@ -372,10 +508,19 @@ app.get(
           process.env.EMAIL_FROM &&
           process.env.EMAIL_USER
             ? 'configured'
-            : 'missing'
+            : 'missing',
+
+        cors: {
+          enabled: true,
+          currentFrontend:
+            'https://sellflowic.netlify.app',
+          legacyFrontend:
+            'https://sellflowme.netlify.app'
+        }
       });
 
     } catch (error) {
+
       console.error(
         '❌ Erreur test-auth:',
         error
@@ -387,7 +532,9 @@ app.get(
         error:
           error.message
       });
+
     }
+
   }
 );
 
@@ -398,32 +545,40 @@ app.get(
 app.get(
   '/test-email',
   async function (req, res) {
+
     try {
+
       if (!process.env.RESEND_API_KEY) {
+
         return res.status(500).json({
           ok: false,
 
           error:
             'RESEND_API_KEY manquante dans Render.'
         });
+
       }
 
       if (!process.env.EMAIL_FROM) {
+
         return res.status(500).json({
           ok: false,
 
           error:
             'EMAIL_FROM manquante dans Render.'
         });
+
       }
 
       if (!process.env.EMAIL_USER) {
+
         return res.status(500).json({
           ok: false,
 
           error:
             'EMAIL_USER manquante dans Render.'
         });
+
       }
 
       const resend =
@@ -433,6 +588,7 @@ app.get(
 
       const result =
         await resend.emails.send({
+
           from:
             process.env.EMAIL_FROM,
 
@@ -445,10 +601,13 @@ app.get(
 
           text:
             'Félicitations ! SellFlow AI peut maintenant envoyer des emails.'
+
         });
 
       if (result.error) {
+
         return res.status(500).json({
+
           ok: false,
 
           error:
@@ -457,10 +616,13 @@ app.get(
 
           details:
             result.error
+
         });
+
       }
 
       return res.json({
+
         ok: true,
 
         message:
@@ -471,15 +633,18 @@ app.get(
           result.data.id
             ? result.data.id
             : null
+
       });
 
     } catch (error) {
+
       console.error(
         '❌ Erreur Resend:',
         error
       );
 
       return res.status(500).json({
+
         ok: false,
 
         error:
@@ -487,8 +652,11 @@ app.get(
 
         details:
           error.message || null
+
       });
+
     }
+
   }
 );
 
@@ -498,7 +666,9 @@ app.get(
 
 app.use(
   function (req, res) {
+
     return res.status(404).json({
+
       ok: false,
 
       error:
@@ -506,7 +676,9 @@ app.use(
 
       message:
         'Route introuvable.'
+
     });
+
   }
 );
 
@@ -521,6 +693,7 @@ app.use(
     res,
     next
   ) {
+
     console.error(
       '❌ Erreur serveur:',
       err
@@ -530,9 +703,34 @@ app.use(
       return next(err);
     }
 
+    /*
+     * Si une erreur CORS survient,
+     * on renvoie une réponse JSON claire.
+     */
+    if (
+      err &&
+      typeof err.message === 'string' &&
+      err.message.includes('CORS')
+    ) {
+
+      return res.status(403).json({
+
+        ok: false,
+
+        error:
+          'CORS_ERROR',
+
+        message:
+          err.message
+
+      });
+
+    }
+
     return res.status(
       err.status || 500
     ).json({
+
       ok: false,
 
       error:
@@ -541,7 +739,9 @@ app.use(
       message:
         err.message ||
         'Erreur serveur.'
+
     });
+
   }
 );
 
@@ -550,7 +750,9 @@ app.use(
 ========================= */
 
 async function startServer() {
+
   try {
+
     console.log(
       '======================================'
     );
@@ -583,10 +785,25 @@ async function startServer() {
       '✅ Base de données prête.'
     );
 
+    console.log(
+      '🌐 Frontend principal:',
+      'https://sellflowic.netlify.app'
+    );
+
+    console.log(
+      '🌐 Ancien frontend:',
+      'https://sellflowme.netlify.app'
+    );
+
+    console.log(
+      '🔐 CORS activé.'
+    );
+
     app.listen(
       PORT,
       '0.0.0.0',
       function () {
+
         console.log(
           '======================================'
         );
@@ -617,14 +834,22 @@ async function startServer() {
         );
 
         if (subscriptionRoutes) {
+
           console.log(
             '📅 Abonnements: ACTIVÉS'
           );
+
         } else {
+
           console.log(
             '📅 Abonnements: en attente'
           );
+
         }
+
+        console.log(
+          '🔐 CORS: sellflowic.netlify.app AUTORISÉ'
+        );
 
         console.log(
           '======================================'
@@ -638,7 +863,9 @@ async function startServer() {
           typeof startSubscriptionReminderWorker ===
           'function'
         ) {
+
           try {
+
             startSubscriptionReminderWorker();
 
             console.log(
@@ -646,16 +873,21 @@ async function startServer() {
             );
 
           } catch (workerError) {
+
             console.error(
               '❌ Erreur démarrage worker abonnement:',
               workerError
             );
+
           }
+
         }
+
       }
     );
 
   } catch (error) {
+
     console.error(
       '======================================'
     );
@@ -673,7 +905,9 @@ async function startServer() {
     );
 
     process.exit(1);
+
   }
+
 }
 
 startServer();
