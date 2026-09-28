@@ -12,6 +12,15 @@ const paymentsRoutes = require('./routes/payments');
 const webhooksRoutes = require('./routes/webhooks');
 
 /* =========================================================
+CONFIGURATION
+========================================================= */
+
+const app = express();
+
+const PORT = Number(process.env.PORT) || 4000;
+const API_VERSION = '2.3.4';
+
+/* =========================================================
 SUBSCRIPTIONS
 ========================================================= */
 
@@ -21,13 +30,10 @@ let startSubscriptionReminderWorker = null;
 try {
 subscriptionRoutes = require('./routes/subscriptions');
 
-console.log(
-'✅ routes/subscriptions.js chargé.'
-);
-
+console.log('✅ routes/subscriptions.js chargé.');
 } catch (error) {
 console.log(
-'ℹ️ routes/subscriptions.js non installé pour le moment.'
+'ℹ️ routes/subscriptions.js non installé.'
 );
 }
 
@@ -43,23 +49,11 @@ typeof subscriptionService.startSubscriptionReminderWorker ===
 startSubscriptionReminderWorker =
 subscriptionService.startSubscriptionReminderWorker;
 }
-
 } catch (error) {
 console.log(
-'ℹ️ services/subscriptions.js non installé pour le moment.'
+'ℹ️ services/subscriptions.js non installé.'
 );
 }
-
-/* =========================================================
-APP
-========================================================= */
-
-const app = express();
-
-const PORT =
-process.env.PORT || 4000;
-
-const API_VERSION = '2.3.3';
 
 /* =========================================================
 CORS
@@ -71,13 +65,13 @@ const allowedOrigins = [
 
 'http://localhost:3000',
 'http://localhost:5173',
+
 'http://127.0.0.1:3000',
 'http://127.0.0.1:5173'
 ];
 
 if (process.env.FRONTEND_URL) {
-const frontendUrl =
-process.env.FRONTEND_URL
+const frontendUrl = process.env.FRONTEND_URL
 .trim()
 .replace(//+$/, '');
 
@@ -93,16 +87,16 @@ const uniqueAllowedOrigins = [
 ...new Set(
 allowedOrigins
 .filter(Boolean)
-.map(function (origin) {
-return origin
+.map((origin) =>
+origin
 .trim()
-.replace(//+$/, '');
-})
+.replace(//+$/, '')
+)
 )
 ];
 
 console.log(
-'🌐 Origines CORS autorisées:',
+'🌐 CORS:',
 uniqueAllowedOrigins
 );
 
@@ -111,33 +105,43 @@ CORS OPTIONS
 ========================================================= */
 
 const corsOptions = {
-origin: function (origin, callback) {
+origin(origin, callback) {
 
 ```
 /*
  * Requêtes sans Origin :
- * curl, Postman, Render health checks, etc.
+ * Render, curl, Postman, etc.
  */
 
 if (!origin) {
   return callback(null, true);
 }
 
+const normalizedOrigin = origin
+  .trim()
+  .replace(/\/+$/, '');
+
 /*
- * En développement :
- * autoriser les requêtes.
+ * Développement local
  */
 
 if (
-  process.env.NODE_ENV !== 'production'
+  process.env.NODE_ENV !== 'production' &&
+  (
+    normalizedOrigin.startsWith(
+      'http://localhost:'
+    ) ||
+    normalizedOrigin.startsWith(
+      'http://127.0.0.1:'
+    )
+  )
 ) {
   return callback(null, true);
 }
 
-const normalizedOrigin =
-  origin
-    .trim()
-    .replace(/\/+$/, '');
+/*
+ * Production
+ */
 
 if (
   uniqueAllowedOrigins.includes(
@@ -179,11 +183,6 @@ allowedHeaders: [
 'Origin'
 ],
 
-exposedHeaders: [
-'Content-Length',
-'Content-Type'
-],
-
 credentials: true,
 
 optionsSuccessStatus: 204,
@@ -191,41 +190,24 @@ optionsSuccessStatus: 204,
 maxAge: 86400
 };
 
-/*
+app.use(cors(corsOptions));
 
-* CORS doit être installé avant les routes.
-  */
+/* =========================================================
+OPTIONS
+========================================================= */
 
-app.use(
+app.options(
+'*',
 cors(corsOptions)
 );
 
-/*
-
-* Gestion explicite des requêtes OPTIONS.
-  */
-
-app.use(
-function (req, res, next) {
-
-```
-if (req.method === 'OPTIONS') {
-  return res.sendStatus(204);
-}
-
-next();
-```
-
-}
-);
-
 /* =========================================================
-WEBHOOKS MONEROO
+WEBHOOKS
 ========================================================= */
 
 /*
 
-* Le webhook reste avant express.json()
+* Les webhooks sont montés avant express.json()
 * pour préserver le traitement éventuel du body brut.
   */
 
@@ -235,7 +217,7 @@ webhooksRoutes
 );
 
 /* =========================================================
-JSON
+BODY PARSERS
 ========================================================= */
 
 app.use(
@@ -243,10 +225,6 @@ express.json({
 limit: '1mb'
 })
 );
-
-/* =========================================================
-URLENCODED
-========================================================= */
 
 app.use(
 express.urlencoded({
@@ -272,6 +250,8 @@ return res.json({
 
   version: API_VERSION,
 
+  emailService: 'disabled',
+
   frontend: {
     current:
       'https://sellflowic.netlify.app',
@@ -291,55 +271,19 @@ return res.json({
     testAuth:
       'GET /test-auth',
 
-    chariow: {
-
-      stores:
-        'GET /chariow/stores',
-
-      addStore:
-        'POST /chariow/stores',
-
-      getStore:
-        'GET /chariow/stores/:id',
-
-      updateStore:
-        'PUT /chariow/stores/:id',
-
-      activateStore:
-        'POST /chariow/stores/:id/activate',
-
-      activeStore:
-        'GET /chariow/stores/active/current',
-
-      deleteStore:
-        'DELETE /chariow/stores/:id',
-
-      syncStatus:
-        'POST /chariow/stores/:id/sync-status'
-    },
+    chariow:
+      '/chariow',
 
     subscriptions:
       subscriptionRoutes
         ? '/subscriptions'
         : 'non installé',
 
-    payments: {
+    payments:
+      '/payments',
 
-      offers:
-        'GET /payments/offers',
-
-      create:
-        'POST /payments/create',
-
-      get:
-        'GET /payments/:paymentId'
-    },
-
-    webhooks: {
-
-      moneroo:
-        'POST /webhooks/moneroo'
-    }
+    webhooks:
+      '/webhooks'
   }
 });
 ```
@@ -383,7 +327,7 @@ try {
 } catch (error) {
 
   console.error(
-    '❌ Erreur PostgreSQL:',
+    '❌ Health database error:',
     error
   );
 
@@ -449,7 +393,7 @@ paymentsRoutes
 );
 
 /* =========================================================
-TEST AUTH / DATABASE
+TEST AUTH
 ========================================================= */
 
 app.get(
@@ -465,11 +409,6 @@ try {
   await db.query(
     'SELECT 1'
   );
-
-  /*
-   * Vérification de la table
-   * registration_requests.
-   */
 
   const tableCheck =
     await db.query(`
@@ -489,6 +428,7 @@ try {
       'connected',
 
     registrationRequestsTable:
+      tableCheck.rows[0] &&
       tableCheck.rows[0].table_name
         ? 'exists'
         : 'missing',
@@ -496,34 +436,22 @@ try {
     chariowRoutes:
       'enabled',
 
-    subscriptionRoutes:
-      subscriptionRoutes
-        ? 'enabled'
-        : 'not-installed',
-
     paymentRoutes:
       'enabled',
 
     monerooWebhook:
       'enabled',
 
-    email:
-      'not-configured',
+    subscriptionRoutes:
+      subscriptionRoutes
+        ? 'enabled'
+        : 'not-installed',
 
-    cors: {
+    emailService:
+      'disabled',
 
-      enabled:
-        true,
-
-      currentFrontend:
-        'https://sellflowic.netlify.app',
-
-      legacyFrontend:
-        'https://sellflowme.netlify.app',
-
-      allowedOrigins:
-        uniqueAllowedOrigins
-    }
+    cors:
+      uniqueAllowedOrigins
   });
 
 } catch (error) {
@@ -574,12 +502,7 @@ ERROR HANDLER
 ========================================================= */
 
 app.use(
-function (
-err,
-req,
-res,
-next
-) {
+function (err, req, res, next) {
 
 ```
 console.error(
@@ -590,10 +513,6 @@ console.error(
 if (res.headersSent) {
   return next(err);
 }
-
-/*
- * Erreur CORS.
- */
 
 if (
   err &&
@@ -645,15 +564,24 @@ console.log(
 );
 
 console.log(
-  '🚀 Démarrage de SellFlow AI...'
+  '🚀 Démarrage de SellFlow AI'
+);
+
+console.log(
+  '📦 Version API:',
+  API_VERSION
 );
 
 console.log(
   '======================================'
 );
 
+/* -----------------------------------
+   DATABASE CONNECTION
+----------------------------------- */
+
 console.log(
-  '🔌 Connexion à PostgreSQL...'
+  '🔌 Connexion PostgreSQL...'
 );
 
 await database.testDatabaseConnection();
@@ -662,8 +590,12 @@ console.log(
   '✅ PostgreSQL connecté.'
 );
 
+/* -----------------------------------
+   DATABASE INITIALIZATION
+----------------------------------- */
+
 console.log(
-  '🗄️ Initialisation de la base de données...'
+  '🗄️ Initialisation de la base...'
 );
 
 await databaseInit.initDatabase();
@@ -672,112 +604,131 @@ console.log(
   '✅ Base de données prête.'
 );
 
-console.log(
-  '🌐 Frontend principal:',
-  'https://sellflowic.netlify.app'
-);
+/* -----------------------------------
+   SERVER
+----------------------------------- */
 
-console.log(
-  '🌐 Ancien frontend:',
-  'https://sellflowme.netlify.app'
-);
-
-console.log(
-  '🔐 CORS activé.'
-);
-
-app.listen(
-  PORT,
-  '0.0.0.0',
-  function () {
-
-    console.log(
-      '======================================'
-    );
-
-    console.log(
-      '✅ SellFlow API démarrée'
-    );
-
-    console.log(
-      '🌐 Port: ' + PORT
-    );
-
-    console.log(
-      '📦 Version API: ' +
-      API_VERSION
-    );
-
-    console.log(
-      '🔐 Authentification: ACTIVÉE'
-    );
-
-    console.log(
-      '🛍️ Chariow multi-boutiques: ACTIVÉ'
-    );
-
-    console.log(
-      '💳 Paiements Moneroo: ACTIVÉS'
-    );
-
-    console.log(
-      '🔔 Webhook Moneroo: ACTIVÉ'
-    );
-
-    if (subscriptionRoutes) {
+const server =
+  app.listen(
+    PORT,
+    '0.0.0.0',
+    function () {
 
       console.log(
-        '📅 Abonnements: ACTIVÉS'
+        '======================================'
       );
-
-    } else {
 
       console.log(
-        '📅 Abonnements: en attente'
+        '✅ SELLFLOW API DÉMARRÉE'
       );
-    }
 
-    console.log(
-      '📧 Service email externe: DÉSACTIVÉ'
-    );
+      console.log(
+        '🌐 Port:',
+        PORT
+      );
 
-    console.log(
-      '🌐 CORS: sellflowic.netlify.app AUTORISÉ'
-    );
+      console.log(
+        '📦 API:',
+        API_VERSION
+      );
 
-    console.log(
-      '🌐 CORS: sellflowme.netlify.app AUTORISÉ'
-    );
+      console.log(
+        '🔐 Authentification: ACTIVÉE'
+      );
 
-    console.log(
-      '======================================'
-    );
+      console.log(
+        '🛍️ Chariow: ACTIVÉ'
+      );
 
-    /*
-     * Worker des rappels d'abonnement.
-     */
+      console.log(
+        '💳 Moneroo: ACTIVÉ'
+      );
 
-    if (
-      typeof startSubscriptionReminderWorker ===
-      'function'
-    ) {
+      console.log(
+        '🔔 Webhook Moneroo: ACTIVÉ'
+      );
 
-      try {
+      console.log(
+        '📧 Resend: DÉSACTIVÉ'
+      );
 
-        startSubscriptionReminderWorker();
+      console.log(
+        '📧 Service email externe: DÉSACTIVÉ'
+      );
+
+      console.log(
+        '🌐 Frontend:',
+        'https://sellflowic.netlify.app'
+      );
+
+      if (subscriptionRoutes) {
 
         console.log(
-          '⏰ Worker des abonnements démarré.'
+          '📅 Abonnements: ACTIVÉS'
         );
 
-      } catch (workerError) {
+      } else {
 
-        console.error(
-          '❌ Erreur démarrage worker abonnement:',
-          workerError
+        console.log(
+          '📅 Abonnements: NON INSTALLÉS'
         );
       }
+
+      console.log(
+        '======================================'
+      );
+
+      /* -----------------------------
+         SUBSCRIPTION WORKER
+      ----------------------------- */
+
+      if (
+        typeof startSubscriptionReminderWorker ===
+        'function'
+      ) {
+
+        try {
+
+          startSubscriptionReminderWorker();
+
+          console.log(
+            '⏰ Worker abonnements démarré.'
+          );
+
+        } catch (workerError) {
+
+          console.error(
+            '❌ Erreur worker abonnements:',
+            workerError
+          );
+        }
+      }
     }
+  );
+
+/* -----------------------------------
+   SERVER ERROR
+----------------------------------- */
+
+server.on(
+  'error',
+  function (error) {
+
+    console.error(
+      '❌ Erreur du serveur HTTP:',
+      error
+    );
+
+    if (
+      error.code === 'EADDRINUSE'
+    ) {
+
+      console.error(
+        `❌ Le port ${PORT} est déjà utilisé.`
+      );
+    }
+
+    process.exit(1);
   }
 );
 ```
@@ -791,6 +742,10 @@ console.error(
 
 console.error(
   '❌ IMPOSSIBLE DE DÉMARRER SELLFLOW'
+);
+
+console.error(
+  '======================================'
 );
 
 console.error(
@@ -808,7 +763,41 @@ process.exit(1);
 }
 
 /* =========================================================
-LANCEMENT
+PROCESS ERRORS
+========================================================= */
+
+process.on(
+'unhandledRejection',
+function (reason) {
+
+```
+console.error(
+  '❌ Unhandled Promise Rejection:',
+  reason
+);
+```
+
+}
+);
+
+process.on(
+'uncaughtException',
+function (error) {
+
+```
+console.error(
+  '❌ Uncaught Exception:',
+  error
+);
+
+process.exit(1);
+```
+
+}
+);
+
+/* =========================================================
+START
 ========================================================= */
 
 startServer();
