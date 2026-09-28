@@ -7853,3 +7853,470 @@ body.light-mode7 .sf-int-dialog span{color:#56606d!important;opacity:1!important
   });
 })();
 </script>
+<script id="sf-v5-final-patch">
+(function(){
+  'use strict';
+
+  const CH_LIVE_CACHE='sellflow_chariow_live_cache_v5';
+
+  function readJSON5(k,storage){
+    try{
+      return JSON.parse((storage||localStorage).getItem(k)||'null');
+    }catch(e){
+      return null;
+    }
+  }
+
+  function readLiveCache(){
+    return readJSON5(CH_LIVE_CACHE,localStorage)
+      || readJSON5('sellflow_chariow_live_v2',sessionStorage)
+      || readJSON5('sellflow_chariow_live_v2',localStorage)
+      || null;
+  }
+
+  function saveLiveCache(v){
+    try{
+      localStorage.setItem(
+        CH_LIVE_CACHE,
+        JSON.stringify(v)
+      );
+    }catch(e){}
+
+    try{
+      sessionStorage.setItem(
+        'sellflow_chariow_live_v2',
+        JSON.stringify(v)
+      );
+    }catch(e){}
+  }
+
+  window.readLiveCache=readLiveCache;
+  window.saveLiveCache=saveLiveCache;
+
+  window.sfGoogleAuth=function(){
+    const url=
+      window.SF_GOOGLE_AUTH_URL
+      ||'https://sellflow-backend.onrender.com/auth/google';
+
+    window.location.href=url;
+  };
+
+  const oldSync=window.syncChariow;
+
+  if(typeof oldSync==='function'){
+    window.syncChariow=async function(key){
+      const result=await oldSync(key);
+
+      try{
+        const live=
+          readJSON5(
+            'sellflow_chariow_live_v2',
+            sessionStorage
+          );
+
+        if(live?.connected){
+          saveLiveCache(live);
+        }
+      }catch(e){}
+
+      return result;
+    };
+  }
+
+  const oldUpdate=window.updateStorePanel;
+
+  window.updateStorePanel=function(){
+
+    try{
+      const live=readLiveCache();
+
+      if(
+        live?.connected
+        &&
+        !readJSON5(
+          'sellflow_chariow_live_v2',
+          sessionStorage
+        )
+      ){
+        sessionStorage.setItem(
+          'sellflow_chariow_live_v2',
+          JSON.stringify(live)
+        );
+      }
+
+    }catch(e){}
+
+    if(typeof oldUpdate==='function'){
+      oldUpdate();
+    }
+  };
+
+  const oldLogout=window.sfLogout;
+
+  window.sfLogout=function(){
+
+    try{
+      localStorage.removeItem(CH_LIVE_CACHE);
+    }catch(e){}
+
+    return oldLogout
+      ? oldLogout()
+      : location.reload();
+  };
+
+  window.addEventListener('load',function(){
+
+    setTimeout(function(){
+
+      const live=readLiveCache();
+
+      if(live?.connected){
+
+        try{
+          sessionStorage.setItem(
+            'sellflow_chariow_live_v2',
+            JSON.stringify(live)
+          );
+        }catch(e){}
+
+        const b=
+          document.getElementById('sfWowLiveBadge');
+
+        if(b){
+          b.classList.remove('demo');
+
+          const sp=b.querySelector('span');
+
+          if(sp){
+            sp.textContent='LIVE';
+          }
+        }
+
+        try{
+          if(window.state){
+            window.state.live=true;
+            window.state.store=live.store||null;
+            window.state.products=live.products||[];
+            window.state.sales=live.sales||[];
+            window.state.customers=live.customers||[];
+          }
+        }catch(e){}
+      }
+
+    },250);
+  });
+
+})();
+</script>
+<script>
+(function(){
+  'use strict';
+
+  const API =
+    window.SF_API ||
+    'https://sellflow-backend.onrender.com';
+
+  const NAMES = {
+    free:'Free',
+    starter:'Starter',
+    pro:'Pro',
+    business:'Business'
+  };
+
+  let billing =
+    window.sfSubscriptionBilling ||
+    'monthly';
+
+  function token(){
+    try{
+      return localStorage.getItem('sellflow_token') ||
+             sessionStorage.getItem('sellflow_token') ||
+             '';
+    }catch(e){
+      return '';
+    }
+  }
+
+  function setServerFree(){
+    window.sfServerSubscription=null;
+    window.sfServerPlan='free';
+  }
+
+  function paint(sub){
+    const plan =
+      sub &&
+      sub.status==='active' &&
+      NAMES[String(sub.plan||'').toLowerCase()]
+        ? String(sub.plan).toLowerCase()
+        : 'free';
+
+    window.sfServerPlan=plan;
+
+    document.querySelectorAll('[data-plan]').forEach(function(el){
+      const p=String(el.getAttribute('data-plan')||'').toLowerCase();
+      const active=p===plan;
+
+      el.classList.toggle('active',active);
+      el.classList.toggle('current',active);
+
+      const b=el.querySelector('button');
+
+      if(b){
+        b.disabled=active;
+        b.textContent=
+          active
+            ? 'Plan actuel'
+            : (
+                sub &&
+                sub.status==='active'
+                  ? 'Changer de plan'
+                  : 'Choisir '+(NAMES[p]||p)
+              );
+      }
+    });
+
+    if(!activePlanExists(plan)){
+      try{
+        document.querySelectorAll('[data-plan]').forEach(function(el){
+          el.classList.remove('active','current');
+        });
+      }catch(e){}
+    }
+  }
+
+  function activePlanExists(plan){
+    return !!document.querySelector(
+      '[data-plan="'+plan+'"]'
+    );
+  }
+
+  async function syncFinal(){
+
+    /* Ne jamais faire confiance à un ancien abonnement stocké localement. */
+    setServerFree();
+
+    const t=token();
+
+    if(!t){
+      paint(null);
+      return null;
+    }
+
+    try{
+
+      const r=await fetch(
+        API+'/subscriptions/me',
+        {
+          headers:{
+            Authorization:'Bearer '+t,
+            Accept:'application/json'
+          },
+          cache:'no-store'
+        }
+      );
+
+      const d=
+        await r.json().catch(function(){
+          return {};
+        });
+
+      if(!r.ok || !d.subscription){
+        paint(null);
+        return null;
+      }
+
+      const sub=d.subscription;
+
+      window.sfServerSubscription=sub;
+
+      window.sfServerPlan=
+        (
+          sub.status==='active' &&
+          NAMES[String(sub.plan).toLowerCase()]
+        )
+          ? String(sub.plan).toLowerCase()
+          : 'free';
+
+      paint(sub);
+
+      if(
+        typeof window.sfV15RefreshPlanUI==='function'
+      ){
+        try{
+          window.sfV15RefreshPlanUI();
+        }catch(e){}
+      }
+
+      return sub;
+
+    }catch(e){
+
+      console.warn(
+        'V20 abonnement:',
+        e.message
+      );
+
+      paint(null);
+
+      return null;
+    }
+  }
+
+  window.sfSyncSubscription=syncFinal;
+
+  window.sfGetServerPlan=function(){
+    return window.sfServerPlan || 'free';
+  };
+
+  window.sfGetServerSubscription=function(){
+    return window.sfServerSubscription || null;
+  };
+
+  window.setBilling17=function(v){
+
+    billing =
+      v==='yearly'
+        ? 'yearly'
+        : 'monthly';
+
+    window.sfSubscriptionBilling=billing;
+
+    const monthly=
+      document.getElementById(
+        'sfSub17Monthly'
+      );
+
+    const yearly=
+      document.getElementById(
+        'sfSub17Yearly'
+      );
+
+    if(monthly){
+      monthly.classList.toggle(
+        'active',
+        billing==='monthly'
+      );
+    }
+
+    if(yearly){
+      yearly.classList.toggle(
+        'active',
+        billing==='yearly'
+      );
+    }
+
+    paint(
+      window.sfServerSubscription || null
+    );
+
+    try{
+
+      window.dispatchEvent(
+        new CustomEvent(
+          'sellflow:billing-change',
+          {
+            detail:{
+              billing:billing
+            }
+          }
+        )
+      );
+
+    }catch(e){}
+  };
+
+  window.manageSubscription17=function(){
+
+    const sub=
+      window.sfServerSubscription;
+
+    if(
+      !sub ||
+      sub.status!=='active'
+    ){
+
+      if(typeof toast==='function'){
+        toast(
+          'Aucun abonnement actif. Choisis Starter, Pro ou Business.'
+        );
+      }
+
+      return false;
+    }
+
+    if(typeof choosePlan17==='function'){
+      choosePlan17(
+        String(sub.plan).toLowerCase()
+      );
+    }
+
+    return true;
+  };
+
+  function run(){
+
+    paint(
+      window.sfServerSubscription &&
+      window.sfServerPlan!=='free'
+        ? window.sfServerSubscription
+        : null
+    );
+
+    syncFinal();
+  }
+
+  window.addEventListener(
+    'load',
+    function(){
+      setTimeout(run,50);
+    }
+  );
+
+  window.addEventListener(
+    'pageshow',
+    function(){
+      setTimeout(run,50);
+    }
+  );
+
+  window.addEventListener(
+    'hashchange',
+    function(){
+      if(location.hash==='#subscription'){
+        setTimeout(run,50);
+      }
+    }
+  );
+
+  document.addEventListener(
+    'click',
+    function(e){
+
+      if(
+        e.target.closest &&
+        e.target.closest(
+          '[data-page="subscription"],#sfRefreshSubscription'
+        )
+      ){
+        setTimeout(run,100);
+      }
+
+    }
+  );
+
+})();
+</script>
+
+<script>
+window.SF_FRONTEND_VERSION='20.0.0';
+</script>
+<script>
+window.SF_FRONTEND_VERSION='20.0.0';
+</script>
+  window.addEventListener('hashchange',function(){
+    try{window.hideChariowLock()}catch(e){}
+  });
+})();
+</script>
+</body>
+</html>
