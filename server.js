@@ -14,7 +14,7 @@ const webhooksRoutes = require('./routes/webhooks');
 const app = express();
 
 const PORT = Number(process.env.PORT) || 4000;
-const API_VERSION = '2.3.7';
+const API_VERSION = '2.3.8';
 
 /* =========================================================
    SUBSCRIPTIONS
@@ -25,7 +25,6 @@ let startSubscriptionReminderWorker = null;
 
 try {
   subscriptionRoutes = require('./routes/subscriptions');
-
   console.log('✅ routes/subscriptions.js chargé.');
 } catch (error) {
   console.log('ℹ️ routes/subscriptions.js non installé.');
@@ -37,15 +36,20 @@ try {
 
   if (
     subscriptionService &&
-    typeof subscriptionService.startSubscriptionReminderWorker === 'function'
+    typeof subscriptionService.startSubscriptionReminderWorker ===
+      'function'
   ) {
     startSubscriptionReminderWorker =
       subscriptionService.startSubscriptionReminderWorker;
 
-    console.log('✅ Worker abonnements disponible.');
+    console.log(
+      '✅ Worker abonnements disponible.'
+    );
   }
 } catch (error) {
-  console.log('ℹ️ services/subscriptions.js non installé.');
+  console.log(
+    'ℹ️ services/subscriptions.js non installé.'
+  );
 }
 
 /* =========================================================
@@ -64,7 +68,9 @@ const allowedOrigins = [
 ];
 
 if (process.env.FRONTEND_URL) {
-  allowedOrigins.push(process.env.FRONTEND_URL);
+  allowedOrigins.push(
+    process.env.FRONTEND_URL
+  );
 }
 
 const normalizedAllowedOrigins = [
@@ -203,11 +209,6 @@ app.use(
   cors(corsOptions)
 );
 
-app.options(
-  '*',
-  cors(corsOptions)
-);
-
 /* =========================================================
    WEBHOOKS MONEROO
 ========================================================= */
@@ -243,9 +244,13 @@ app.get(
   function (req, res) {
     return res.json({
       name: 'SellFlow AI API',
+
       status: 'online',
+
       version: API_VERSION,
+
       emailService: 'disabled',
+
       resend: 'disabled',
 
       frontend: {
@@ -525,6 +530,10 @@ async function startServer() {
       '======================================'
     );
 
+    /* -----------------------------------
+       POSTGRESQL
+    ----------------------------------- */
+
     console.log(
       '🔌 Connexion à PostgreSQL...'
     );
@@ -545,6 +554,10 @@ async function startServer() {
       '✅ PostgreSQL connecté.'
     );
 
+    /* -----------------------------------
+       DATABASE INIT
+    ----------------------------------- */
+
     console.log(
       '🗄️ Initialisation de la base de données...'
     );
@@ -554,6 +567,10 @@ async function startServer() {
     console.log(
       '✅ Base de données prête.'
     );
+
+    /* -----------------------------------
+       HTTP SERVER
+    ----------------------------------- */
 
     const server =
       app.listen(
@@ -652,8 +669,7 @@ async function startServer() {
         );
 
         if (
-          error.code ===
-          'EADDRINUSE'
+          error.code === 'EADDRINUSE'
         ) {
           console.error(
             '❌ Le port ' +
