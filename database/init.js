@@ -1,4 +1,3 @@
-```javascript
 const { getPool } = require('../config/database');
 
 async function initDatabase() {
