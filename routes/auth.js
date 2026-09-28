@@ -1,4 +1,3 @@
-```javascript
 const express = require('express');
 const crypto = require('crypto');
 const { google } = require('googleapis');
@@ -21,18 +20,26 @@ const router = express.Router();
 const pool = getPool();
 
 /* =========================================================
+   CONFIGURATION
+========================================================= */
+
+const FRONTEND_URL =
+  process.env.FRONTEND_URL ||
+  'https://sellflowic.netlify.app';
+
+const BACKEND_URL =
+  process.env.BACKEND_URL ||
+  'https://sellflow-backend.onrender.com';
+
+/* =========================================================
    OUTILS
 ========================================================= */
 
 /**
- * Normalise toujours l'e-mail :
+ * Normalise un e-mail :
+ * - conversion en texte
  * - suppression des espaces
- * - passage en minuscules
- *
- * Exemple :
- * "  Test@Gmail.COM "
- * devient :
- * "test@gmail.com"
+ * - minuscules
  */
 function normalizeEmail(email) {
   return String(email || '')
@@ -48,8 +55,8 @@ function isValidEmail(email) {
 }
 
 /**
- * Retourne uniquement les informations
- * publiques de l'utilisateur.
+ * Retourne uniquement les données publiques
+ * d'un utilisateur.
  */
 function publicUser(user) {
   if (!user) {
@@ -58,7 +65,7 @@ function publicUser(user) {
 
   return {
     id: user.id,
-    name: user.name,
+    name: user.name || '',
     email: normalizeEmail(user.email),
     phone: user.phone || '',
     country: user.country || '',
@@ -69,11 +76,21 @@ function publicUser(user) {
 }
 
 /**
- * Recherche un utilisateur avec son e-mail
- * de manière insensible aux majuscules/espaces.
+ * Recherche un utilisateur par e-mail.
+ *
+ * La recherche est volontairement normalisée
+ * afin d'éviter les doublons du type :
+ *
+ * Test@gmail.com
+ * test@gmail.com
+ *  test@gmail.com
  */
 async function findUserByEmail(email) {
   const normalizedEmail = normalizeEmail(email);
+
+  if (!normalizedEmail) {
+    return null;
+  }
 
   const result = await pool.query(
     `
@@ -100,8 +117,7 @@ async function findUserByEmail(email) {
 }
 
 /**
- * Message standard lorsqu'un e-mail
- * existe déjà.
+ * Réponse standard lorsqu'un e-mail existe déjà.
  */
 function emailAlreadyExistsResponse(res) {
   return res.status(409).json({
@@ -109,6 +125,98 @@ function emailAlreadyExistsResponse(res) {
     message:
       'Cette adresse e-mail est déjà utilisée par un compte SellFlow. Utilise une autre adresse ou connecte-toi à ton compte.'
   });
+}
+
+/**
+ * Valide les informations communes
+ * d'une inscription.
+ */
+function validateRegistrationData({
+  name,
+  email,
+  phone,
+  password,
+  password2
+}) {
+  if (!name) {
+    return 'Le nom est obligatoire.';
+  }
+
+  if (!email || !isValidEmail(email)) {
+    return 'Adresse e-mail invalide.';
+  }
+
+  if (!phone || phone.length < 5) {
+    return 'Numéro de téléphone invalide.';
+  }
+
+  if (!password || password.length < 8) {
+    return 'Le mot de passe doit contenir au moins 8 caractères.';
+  }
+
+  if (password !== password2) {
+    return 'Les mots de passe ne correspondent pas.';
+  }
+
+  return null;
+}
+
+/**
+ * Création réelle d'un compte.
+ *
+ * Cette fonction est utilisée par les deux routes
+ * d'inscription afin d'éviter de dupliquer le code.
+ */
+async function createUser({
+  name,
+  email,
+  phone,
+  country,
+  passwordHash
+}) {
+  const result = await pool.query(
+    `
+    INSERT INTO users (
+      id,
+      name,
+      email,
+      phone,
+      country,
+      password_hash,
+      email_verified,
+      plan
+    )
+    VALUES (
+      gen_random_uuid(),
+      $1,
+      $2,
+      $3,
+      $4,
+      $5,
+      TRUE,
+      'free'
+    )
+    RETURNING
+      id,
+      name,
+      email,
+      phone,
+      country,
+      password_hash,
+      email_verified,
+      plan,
+      created_at
+    `,
+    [
+      name,
+      email,
+      phone,
+      country,
+      passwordHash
+    ]
+  );
+
+  return result.rows[0];
 }
 
 /* =========================================================
@@ -142,40 +250,23 @@ router.post('/register/complete', async (req, res) => {
        VALIDATION
     ----------------------------------------- */
 
-    if (!name) {
-      return res.status(400).json({
-        message: 'Le nom est obligatoire.'
+    const validationError =
+      validateRegistrationData({
+        name,
+        email,
+        phone,
+        password,
+        password2
       });
-    }
 
-    if (!email || !isValidEmail(email)) {
+    if (validationError) {
       return res.status(400).json({
-        message: 'Adresse e-mail invalide.'
-      });
-    }
-
-    if (!phone || phone.length < 5) {
-      return res.status(400).json({
-        message: 'Numéro de téléphone invalide.'
-      });
-    }
-
-    if (!password || password.length < 8) {
-      return res.status(400).json({
-        message:
-          'Le mot de passe doit contenir au moins 8 caractères.'
-      });
-    }
-
-    if (password !== password2) {
-      return res.status(400).json({
-        message:
-          'Les mots de passe ne correspondent pas.'
+        message: validationError
       });
     }
 
     /* -----------------------------------------
-       VÉRIFICATION E-MAIL EXISTANT
+       VÉRIFICATION EMAIL EXISTANT
     ----------------------------------------- */
 
     const existingUser =
@@ -193,57 +284,26 @@ router.post('/register/complete', async (req, res) => {
       await hashPassword(password);
 
     /* -----------------------------------------
-       CRÉATION DU COMPTE
+       CRÉATION
     ----------------------------------------- */
 
-    let result;
+    let user;
 
     try {
-      result = await pool.query(
-        `
-        INSERT INTO users (
-          id,
-          name,
-          email,
-          phone,
-          country,
-          password_hash,
-          email_verified,
-          plan
-        )
-        VALUES (
-          gen_random_uuid(),
-          $1,
-          $2,
-          $3,
-          $4,
-          $5,
-          TRUE,
-          'free'
-        )
-        RETURNING
-          id,
-          name,
-          email,
-          phone,
-          country,
-          email_verified,
-          plan,
-          created_at
-        `,
-        [
-          name,
-          email,
-          phone,
-          country,
-          passwordHash
-        ]
-      );
-
+      user = await createUser({
+        name,
+        email,
+        phone,
+        country,
+        passwordHash
+      });
     } catch (dbError) {
 
       /*
-       * Protection contre deux inscriptions
+       * PostgreSQL 23505 =
+       * violation d'une contrainte UNIQUE.
+       *
+       * Cela protège contre deux inscriptions
        * simultanées avec le même e-mail.
        */
       if (
@@ -256,13 +316,12 @@ router.post('/register/complete', async (req, res) => {
       throw dbError;
     }
 
-    const user = result.rows[0];
-
     /* -----------------------------------------
        JWT
     ----------------------------------------- */
 
-    const token = signToken(user);
+    const token =
+      signToken(user);
 
     /* -----------------------------------------
        RÉPONSE
@@ -322,35 +381,18 @@ router.post('/register', async (req, res) => {
        VALIDATION
     ----------------------------------------- */
 
-    if (!name) {
-      return res.status(400).json({
-        message: 'Le nom est obligatoire.'
+    const validationError =
+      validateRegistrationData({
+        name,
+        email,
+        phone,
+        password,
+        password2
       });
-    }
 
-    if (!email || !isValidEmail(email)) {
+    if (validationError) {
       return res.status(400).json({
-        message: 'Adresse e-mail invalide.'
-      });
-    }
-
-    if (!phone || phone.length < 5) {
-      return res.status(400).json({
-        message: 'Numéro de téléphone invalide.'
-      });
-    }
-
-    if (!password || password.length < 8) {
-      return res.status(400).json({
-        message:
-          'Le mot de passe doit contenir au moins 8 caractères.'
-      });
-    }
-
-    if (password !== password2) {
-      return res.status(400).json({
-        message:
-          'Les mots de passe ne correspondent pas.'
+        message: validationError
       });
     }
 
@@ -373,53 +415,19 @@ router.post('/register', async (req, res) => {
       await hashPassword(password);
 
     /* -----------------------------------------
-       INSERTION
+       CRÉATION
     ----------------------------------------- */
 
-    let result;
+    let user;
 
     try {
-      result = await pool.query(
-        `
-        INSERT INTO users (
-          id,
-          name,
-          email,
-          phone,
-          country,
-          password_hash,
-          email_verified,
-          plan
-        )
-        VALUES (
-          gen_random_uuid(),
-          $1,
-          $2,
-          $3,
-          $4,
-          $5,
-          TRUE,
-          'free'
-        )
-        RETURNING
-          id,
-          name,
-          email,
-          phone,
-          country,
-          email_verified,
-          plan,
-          created_at
-        `,
-        [
-          name,
-          email,
-          phone,
-          country,
-          passwordHash
-        ]
-      );
-
+      user = await createUser({
+        name,
+        email,
+        phone,
+        country,
+        passwordHash
+      });
     } catch (dbError) {
 
       if (
@@ -432,13 +440,16 @@ router.post('/register', async (req, res) => {
       throw dbError;
     }
 
-    const user = result.rows[0];
-
     /* -----------------------------------------
        JWT
     ----------------------------------------- */
 
-    const token = signToken(user);
+    const token =
+      signToken(user);
+
+    /* -----------------------------------------
+       RÉPONSE
+    ----------------------------------------- */
 
     return res.status(201).json({
       created: true,
@@ -489,7 +500,7 @@ router.post('/login', async (req, res) => {
     }
 
     /* -----------------------------------------
-       RECHERCHE UTILISATEUR
+       RECHERCHE
     ----------------------------------------- */
 
     const user =
@@ -503,13 +514,9 @@ router.post('/login', async (req, res) => {
     }
 
     /* -----------------------------------------
-       VÉRIFICATION MOT DE PASSE
+       MOT DE PASSE
     ----------------------------------------- */
 
-    /*
-     * Les comptes Google peuvent avoir un mot
-     * de passe généré aléatoirement.
-     */
     if (!user.password_hash) {
       return res.status(401).json({
         message:
@@ -536,6 +543,10 @@ router.post('/login', async (req, res) => {
 
     const token =
       signToken(user);
+
+    /* -----------------------------------------
+       RÉPONSE
+    ----------------------------------------- */
 
     return res.json({
       token,
@@ -642,10 +653,7 @@ router.get(
 
       const redirectUri =
         process.env.GOOGLE_REDIRECT_URI ||
-        `${
-          process.env.BACKEND_URL ||
-          'https://sellflow-backend.onrender.com'
-        }/auth/gmail/callback`;
+        `${BACKEND_URL}/auth/gmail/callback`;
 
       if (!clientId || !clientSecret) {
         return res.status(500).json({
@@ -718,10 +726,7 @@ router.get(
 
       const redirectUri =
         process.env.GOOGLE_REDIRECT_URI ||
-        `${
-          process.env.BACKEND_URL ||
-          'https://sellflow-backend.onrender.com'
-        }/auth/gmail/callback`;
+        `${BACKEND_URL}/auth/gmail/callback`;
 
       if (!clientId || !clientSecret) {
         return res.status(500).send(
@@ -741,7 +746,7 @@ router.get(
         );
 
       /* -----------------------------------------
-         TOKEN GOOGLE
+         RÉCUPÉRATION TOKEN
       ----------------------------------------- */
 
       const {
@@ -780,32 +785,21 @@ router.get(
       }
 
       /* -----------------------------------------
-         RECHERCHE COMPTE EXISTANT
+         COMPTE EXISTANT
       ----------------------------------------- */
 
       let user =
         await findUserByEmail(email);
-
-      /* -----------------------------------------
-         SI LE COMPTE EXISTE
-      ----------------------------------------- */
 
       if (user) {
 
         /*
          * IMPORTANT :
          *
-         * On NE crée PAS de deuxième compte.
+         * Si l'e-mail existe déjà,
+         * on utilise CE compte.
          *
-         * Exemple :
-         *
-         * Compte SellFlow :
-         * test@gmail.com
-         *
-         * Google :
-         * TEST@GMAIL.COM
-         *
-         * => même compte.
+         * Aucun deuxième compte n'est créé.
          */
 
         console.log(
@@ -815,7 +809,7 @@ router.get(
       } else {
 
         /* -----------------------------------------
-           CRÉATION COMPTE GOOGLE
+           NOUVEAU COMPTE GOOGLE
         ----------------------------------------- */
 
         const randomPassword =
@@ -829,57 +823,21 @@ router.get(
 
         try {
 
-          const inserted =
-            await pool.query(
-              `
-              INSERT INTO users (
-                id,
-                name,
-                email,
-                phone,
-                country,
-                password_hash,
-                email_verified,
-                plan
-              )
-              VALUES (
-                gen_random_uuid(),
-                $1,
-                $2,
-                $3,
-                $4,
-                $5,
-                TRUE,
-                'free'
-              )
-              RETURNING
-                id,
-                name,
-                email,
-                phone,
-                country,
-                password_hash,
-                email_verified,
-                plan,
-                created_at
-              `,
-              [
-                profile.name ||
-                  profile.given_name ||
-                  'Utilisateur Google',
-
-                email,
-
-                '',
-
-                '',
-
-                passwordHash
-              ]
-            );
-
           user =
-            inserted.rows[0];
+            await createUser({
+              name:
+                profile.name ||
+                profile.given_name ||
+                'Utilisateur Google',
+
+              email,
+
+              phone: '',
+
+              country: '',
+
+              passwordHash
+            });
 
           console.log(
             `✅ Google : nouveau compte créé pour ${email}`
@@ -888,11 +846,11 @@ router.get(
         } catch (dbError) {
 
           /*
-           * Deux requêtes Google peuvent arriver
-           * quasiment en même temps.
+           * Si un autre processus a créé
+           * le compte entre-temps,
+           * PostgreSQL peut retourner 23505.
            *
-           * Si PostgreSQL signale que l'e-mail
-           * existe déjà, on récupère simplement
+           * Dans ce cas, on récupère
            * le compte existant.
            */
 
@@ -924,20 +882,11 @@ router.get(
         signToken(user);
 
       /* -----------------------------------------
-         FRONTEND
+         REDIRECTION FRONTEND
       ----------------------------------------- */
 
-      const frontend =
-        process.env.FRONTEND_URL ||
-        'https://sellflowic.netlify.app';
-
-      /*
-       * Redirection vers le frontend
-       * avec le JWT.
-       */
-
       return res.redirect(
-        `${frontend}/#google-auth-success?token=${encodeURIComponent(token)}`
+        `${FRONTEND_URL}/#google-auth-success?token=${encodeURIComponent(token)}`
       );
 
     } catch (error) {
@@ -959,4 +908,3 @@ router.get(
 ========================================================= */
 
 module.exports = router;
-```
