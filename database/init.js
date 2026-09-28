@@ -82,6 +82,7 @@ async function initDatabase() {
   await db.query(`
     CREATE TABLE IF NOT EXISTS email_verification_codes (
       id UUID PRIMARY KEY,
+
       user_id UUID
         REFERENCES users(id)
         ON DELETE CASCADE,
@@ -335,6 +336,24 @@ async function initDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_users_subscription_expiry
       ON users(subscription_expires_at);
+  `);
+
+  // =====================================================
+  // UNICITÉ DES EMAILS
+  // =====================================================
+  // Un même email ne peut pas créer plusieurs comptes.
+  // Les majuscules/minuscules et espaces sont ignorés.
+  //
+  // Exemple :
+  // Test@Email.com
+  // test@email.com
+  //  test@email.com
+  //
+  // sont considérés comme le même email.
+
+  await db.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_idx
+      ON users (LOWER(TRIM(email)));
   `);
 
   console.log(
