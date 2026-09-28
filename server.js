@@ -25,9 +25,14 @@ let startSubscriptionReminderWorker = null;
 
 try {
   subscriptionRoutes = require('./routes/subscriptions');
-  console.log('✅ routes/subscriptions.js chargé.');
+
+  console.log(
+    '✅ routes/subscriptions.js chargé.'
+  );
 } catch (error) {
-  console.log('ℹ️ routes/subscriptions.js non installé.');
+  console.log(
+    'ℹ️ routes/subscriptions.js non installé.'
+  );
 }
 
 try {
@@ -91,10 +96,6 @@ console.log(
   normalizedAllowedOrigins
 );
 
-/* =========================================================
-   VÉRIFICATION CORS
-========================================================= */
-
 function isAllowedOrigin(origin) {
   if (!origin) {
     return true;
@@ -120,7 +121,9 @@ function isAllowedOrigin(origin) {
 
     if (
       url.protocol === 'https:' &&
-      url.hostname.endsWith('.netlify.app')
+      url.hostname.endsWith(
+        '.netlify.app'
+      )
     ) {
       const hostname =
         url.hostname.toLowerCase();
@@ -150,15 +153,9 @@ function isAllowedOrigin(origin) {
   return false;
 }
 
-/* =========================================================
-   CONFIGURATION CORS
-========================================================= */
-
 const corsOptions = {
   origin: function (origin, callback) {
-    if (
-      isAllowedOrigin(origin)
-    ) {
+    if (isAllowedOrigin(origin)) {
       return callback(
         null,
         true
@@ -244,13 +241,10 @@ app.get(
   function (req, res) {
     return res.json({
       name: 'SellFlow AI API',
-
       status: 'online',
-
       version: API_VERSION,
 
       emailService: 'disabled',
-
       resend: 'disabled',
 
       frontend: {
@@ -267,9 +261,6 @@ app.get(
 
         auth:
           '/auth',
-
-        testAuth:
-          'GET /test-auth',
 
         chariow:
           '/chariow',
@@ -640,6 +631,10 @@ async function startServer() {
             '======================================'
           );
 
+          /* -----------------------------
+             WORKER ABONNEMENTS
+          ----------------------------- */
+
           if (
             typeof startSubscriptionReminderWorker ===
             'function'
@@ -669,7 +664,8 @@ async function startServer() {
         );
 
         if (
-          error.code === 'EADDRINUSE'
+          error.code ===
+          'EADDRINUSE'
         ) {
           console.error(
             '❌ Le port ' +
