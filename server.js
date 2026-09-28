@@ -1,3 +1,4 @@
+```js
 require('dotenv').config();
 
 const express = require('express');
@@ -21,6 +22,11 @@ let startSubscriptionReminderWorker = null;
 
 try {
   subscriptionRoutes = require('./routes/subscriptions');
+
+  console.log(
+    '✅ routes/subscriptions.js chargé.'
+  );
+
 } catch (error) {
   console.log(
     'ℹ️ routes/subscriptions.js non installé pour le moment.'
@@ -39,6 +45,7 @@ try {
     startSubscriptionReminderWorker =
       subscriptionService.startSubscriptionReminderWorker;
   }
+
 } catch (error) {
   console.log(
     'ℹ️ services/subscriptions.js non installé pour le moment.'
@@ -54,20 +61,19 @@ const app = express();
 const PORT =
   process.env.PORT || 4000;
 
-const API_VERSION = '2.3.1';
+const API_VERSION = '2.3.2';
 
 /* =========================
    CORS
 ========================= */
 
 /*
- * Domaines autorisés pour le frontend SellFlow.
+ * FRONTENDS SELFLOW AUTORISÉS
  *
- * IMPORTANT :
- * Le nouveau frontend Netlify est :
+ * Nouveau frontend :
  * https://sellflowic.netlify.app
  *
- * L'ancien frontend reste autorisé :
+ * Ancien frontend conservé :
  * https://sellflowme.netlify.app
  */
 
@@ -83,16 +89,14 @@ const allowedOrigins = [
 ];
 
 /*
- * Permet éventuellement d'ajouter une origine
- * depuis les variables d'environnement Render.
- *
- * Exemple Render :
- * FRONTEND_URL=https://sellflowic.netlify.app
+ * Ajout éventuel de FRONTEND_URL depuis Render.
  */
 
 if (process.env.FRONTEND_URL) {
   const frontendUrl =
-    process.env.FRONTEND_URL.trim().replace(/\/$/, '');
+    process.env.FRONTEND_URL
+      .trim()
+      .replace(/\/+$/, '');
 
   if (
     frontendUrl &&
@@ -103,10 +107,19 @@ if (process.env.FRONTEND_URL) {
 }
 
 /*
- * Supprime les doublons.
+ * Supprime les doublons et les "/" finaux.
  */
+
 const uniqueAllowedOrigins = [
-  ...new Set(allowedOrigins)
+  ...new Set(
+    allowedOrigins
+      .filter(Boolean)
+      .map(origin =>
+        origin
+          .trim()
+          .replace(/\/+$/, '')
+      )
+  )
 ];
 
 console.log(
@@ -114,29 +127,28 @@ console.log(
   uniqueAllowedOrigins
 );
 
-/*
- * Configuration CORS.
- *
- * Le middleware cors gère également les requêtes
- * OPTIONS / preflight utilisées par fetch().
- */
+/* =========================
+   CORS OPTIONS
+========================= */
 
 const corsOptions = {
+
   origin: function (origin, callback) {
 
     /*
      * Requêtes sans Origin :
-     * Postman, curl, certains health checks,
-     * services internes, etc.
+     * curl, Postman, health checks, etc.
      */
+
     if (!origin) {
       return callback(null, true);
     }
 
     /*
-     * En développement, on autorise les origines
-     * afin de faciliter les tests locaux.
+     * En développement :
+     * autoriser les origines locales.
      */
+
     if (
       process.env.NODE_ENV !== 'production'
     ) {
@@ -144,10 +156,22 @@ const corsOptions = {
     }
 
     /*
-     * Vérification de l'origine autorisée.
+     * Normalisation de l'origine reçue.
      */
+
+    const normalizedOrigin =
+      origin
+        .trim()
+        .replace(/\/+$/, '');
+
+    /*
+     * Vérification.
+     */
+
     if (
-      uniqueAllowedOrigins.includes(origin)
+      uniqueAllowedOrigins.includes(
+        normalizedOrigin
+      )
     ) {
       return callback(null, true);
     }
@@ -195,17 +219,8 @@ const corsOptions = {
 };
 
 /*
- * CORS global.
- *
  * IMPORTANT :
- * Cette ligne doit être placée AVANT les routes.
- * Elle permet notamment de traiter :
- *
- * OPTIONS /auth/login
- * OPTIONS /auth/register/...
- * OPTIONS /subscriptions/me
- * OPTIONS /chariow/...
- * etc.
+ * CORS AVANT toutes les routes.
  */
 
 app.use(
@@ -213,11 +228,7 @@ app.use(
 );
 
 /*
- * Réponse supplémentaire pour les requêtes OPTIONS.
- *
- * Le middleware cors principal gère déjà le preflight.
- * Cette route permet de s'assurer qu'une requête OPTIONS
- * reçue par l'application est correctement terminée.
+ * Gestion explicite des requêtes OPTIONS.
  */
 
 app.use(
@@ -231,17 +242,13 @@ app.use(
   }
 );
 
-/*
- * IMPORTANT :
- *
- * Le webhook Moneroo est monté AVANT express.json()
- * afin que la route puisse récupérer le corps brut
- * si la vérification de signature en a besoin.
- */
-
 /* =========================
    WEBHOOKS MONEROO
 ========================= */
+
+/*
+ * Le webhook reste monté avant express.json().
+ */
 
 app.use(
   '/webhooks',
@@ -276,22 +283,30 @@ app.use(
 app.get(
   '/',
   function (req, res) {
-    res.json({
-      name: 'SellFlow AI API',
 
-      status: 'online',
+    return res.json({
 
-      version: API_VERSION,
+      name:
+        'SellFlow AI API',
+
+      status:
+        'online',
+
+      version:
+        API_VERSION,
 
       frontend: {
+
         current:
           'https://sellflowic.netlify.app',
 
         legacy:
           'https://sellflowme.netlify.app'
+
       },
 
       endpoints: {
+
         health:
           'GET /health',
 
@@ -305,6 +320,7 @@ app.get(
           'GET /test-email',
 
         chariow: {
+
           stores:
             'GET /chariow/stores',
 
@@ -328,6 +344,7 @@ app.get(
 
           syncStatus:
             'POST /chariow/stores/:id/sync-status'
+
         },
 
         subscriptions:
@@ -336,6 +353,7 @@ app.get(
             : 'non installé',
 
         payments: {
+
           offers:
             'GET /payments/offers',
 
@@ -344,13 +362,18 @@ app.get(
 
           get:
             'GET /payments/:paymentId'
+
         },
 
         webhooks: {
+
           moneroo:
             'POST /webhooks/moneroo'
+
         }
+
       }
+
     });
   }
 );
@@ -362,12 +385,14 @@ app.get(
 app.get(
   '/health',
   async function (req, res) {
+
     try {
 
       const result =
         await database.testDatabaseConnection();
 
       return res.json({
+
         ok: true,
 
         service:
@@ -383,6 +408,7 @@ app.get(
 
         time:
           new Date().toISOString()
+
       });
 
     } catch (error) {
@@ -393,6 +419,7 @@ app.get(
       );
 
       return res.status(500).json({
+
         ok: false,
 
         service:
@@ -406,6 +433,7 @@ app.get(
 
         error:
           error.message
+
       });
     }
   }
@@ -415,13 +443,28 @@ app.get(
    AUTH ROUTES
 ========================= */
 
+/*
+ * IMPORTANT :
+ *
+ * Toutes les routes de routes/auth.js
+ * deviennent :
+ *
+ * POST /auth/register
+ * POST /auth/register/complete
+ * POST /auth/login
+ * GET  /auth/me
+ * GET  /auth/gmail/connect
+ * GET  /auth/gmail/callback
+ *
+ */
+
 app.use(
   '/auth',
   authRoutes
 );
 
 /* =========================
-   CHARIOW MULTI-BOUTIQUES
+   CHARIOW
 ========================= */
 
 app.use(
@@ -476,6 +519,7 @@ app.get(
         `);
 
       return res.json({
+
         ok: true,
 
         authRoutes:
@@ -511,12 +555,21 @@ app.get(
             : 'missing',
 
         cors: {
-          enabled: true,
+
+          enabled:
+            true,
+
           currentFrontend:
             'https://sellflowic.netlify.app',
+
           legacyFrontend:
-            'https://sellflowme.netlify.app'
+            'https://sellflowme.netlify.app',
+
+          allowedOrigins:
+            uniqueAllowedOrigins
+
         }
+
       });
 
     } catch (error) {
@@ -527,10 +580,12 @@ app.get(
       );
 
       return res.status(500).json({
+
         ok: false,
 
         error:
           error.message
+
       });
 
     }
@@ -551,10 +606,12 @@ app.get(
       if (!process.env.RESEND_API_KEY) {
 
         return res.status(500).json({
+
           ok: false,
 
           error:
             'RESEND_API_KEY manquante dans Render.'
+
         });
 
       }
@@ -562,10 +619,12 @@ app.get(
       if (!process.env.EMAIL_FROM) {
 
         return res.status(500).json({
+
           ok: false,
 
           error:
             'EMAIL_FROM manquante dans Render.'
+
         });
 
       }
@@ -573,10 +632,12 @@ app.get(
       if (!process.env.EMAIL_USER) {
 
         return res.status(500).json({
+
           ok: false,
 
           error:
             'EMAIL_USER manquante dans Render.'
+
         });
 
       }
@@ -704,9 +765,9 @@ app.use(
     }
 
     /*
-     * Si une erreur CORS survient,
-     * on renvoie une réponse JSON claire.
+     * Erreur CORS.
      */
+
     if (
       err &&
       typeof err.message === 'string' &&
@@ -822,15 +883,19 @@ async function startServer() {
         );
 
         console.log(
+          '🔐 Authentification: ACTIVÉE'
+        );
+
+        console.log(
+          '🛍️ Chariow multi-boutiques: ACTIVÉ'
+        );
+
+        console.log(
           '💳 Paiements Moneroo: ACTIVÉS'
         );
 
         console.log(
           '🔔 Webhook Moneroo: ACTIVÉ'
-        );
-
-        console.log(
-          '🛍️ Chariow multi-boutiques: ACTIVÉ'
         );
 
         if (subscriptionRoutes) {
@@ -848,7 +913,11 @@ async function startServer() {
         }
 
         console.log(
-          '🔐 CORS: sellflowic.netlify.app AUTORISÉ'
+          '🌐 CORS: sellflowic.netlify.app AUTORISÉ'
+        );
+
+        console.log(
+          '🌐 CORS: sellflowme.netlify.app AUTORISÉ'
         );
 
         console.log(
@@ -911,3 +980,4 @@ async function startServer() {
 }
 
 startServer();
+```
