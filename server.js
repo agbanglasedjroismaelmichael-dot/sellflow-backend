@@ -13,7 +13,7 @@ const paymentsRoutes = require('./routes/payments');
 const webhooksRoutes = require('./routes/webhooks');
 
 /* =========================================================
-   APP
+   APPLICATION
 ========================================================= */
 
 const app = express();
@@ -71,27 +71,24 @@ const allowedOrigins = [
 ];
 
 /*
- * FRONTEND_URL facultatif dans Render.
+ * FRONTEND_URL peut être ajouté dans les variables
+ * d'environnement de Render.
  */
 if (process.env.FRONTEND_URL) {
-  const frontendUrl = process.env.FRONTEND_URL
-    .trim()
-    .replace(/\/+$/, '');
-
-  if (frontendUrl) {
-    allowedOrigins.push(frontendUrl);
-  }
+  allowedOrigins.push(
+    process.env.FRONTEND_URL
+  );
 }
 
 /*
- * Normalisation des origines.
+ * Nettoyage et normalisation des origines.
  */
 const normalizedAllowedOrigins = [
   ...new Set(
     allowedOrigins
       .filter(Boolean)
       .map(function (origin) {
-        return origin
+        return String(origin)
           .trim()
           .replace(/\/+$/, '')
           .toLowerCase();
@@ -105,25 +102,31 @@ console.log(
 );
 
 /* =========================================================
-   FONCTION CORS
+   VÉRIFICATION CORS
 ========================================================= */
 
 function isAllowedOrigin(origin) {
   /*
-   * Les requêtes sans Origin sont normales :
-   * Render, curl, Postman, monitoring, etc.
+   * Les requêtes sans Origin sont autorisées.
+   *
+   * Cela concerne notamment :
+   * - Render
+   * - curl
+   * - Postman
+   * - monitoring
+   * - appels serveur à serveur
    */
   if (!origin) {
     return true;
   }
 
-  const normalizedOrigin = origin
+  const normalizedOrigin = String(origin)
     .trim()
     .replace(/\/+$/, '')
     .toLowerCase();
 
   /*
-   * Origines explicitement autorisées.
+   * Origine explicitement autorisée.
    */
   if (
     normalizedAllowedOrigins.includes(
@@ -134,19 +137,19 @@ function isAllowedOrigin(origin) {
   }
 
   /*
-   * Autoriser les déploiements Netlify liés à SellFlow.
-   *
-   * Exemple :
-   * https://xxxxx--sellflowic.netlify.app
+   * Autoriser uniquement les sous-domaines Netlify
+   * appartenant au projet SellFlow.
    */
   try {
-    const url = new URL(normalizedOrigin);
+    const url =
+      new URL(normalizedOrigin);
 
     if (
       url.protocol === 'https:' &&
       url.hostname.endsWith('.netlify.app')
     ) {
-      const hostname = url.hostname.toLowerCase();
+      const hostname =
+        url.hostname.toLowerCase();
 
       if (
         hostname.includes('sellflowic') ||
@@ -163,8 +166,12 @@ function isAllowedOrigin(origin) {
    * Développement local.
    */
   if (
-    normalizedOrigin.startsWith('http://localhost:') ||
-    normalizedOrigin.startsWith('http://127.0.0.1:')
+    normalizedOrigin.startsWith(
+      'http://localhost:'
+    ) ||
+    normalizedOrigin.startsWith(
+      'http://127.0.0.1:'
+    )
   ) {
     return true;
   }
@@ -173,7 +180,7 @@ function isAllowedOrigin(origin) {
 }
 
 /* =========================================================
-   CORS OPTIONS
+   CONFIGURATION CORS
 ========================================================= */
 
 const corsOptions = {
@@ -188,10 +195,10 @@ const corsOptions = {
     );
 
     /*
-     * IMPORTANT :
-     * Ne pas lancer d'erreur ici.
-     * La requête n'obtiendra simplement pas les
-     * headers CORS.
+     * Ne pas générer d'exception.
+     *
+     * Cela évite le crash :
+     * "Origine CORS non autorisée."
      */
     return callback(null, false);
   },
@@ -225,13 +232,18 @@ const corsOptions = {
   maxAge: 86400
 };
 
-app.use(cors(corsOptions));
+app.use(
+  cors(corsOptions)
+);
 
 /* =========================================================
-   OPTIONS
+   OPTIONS / PREFLIGHT
 ========================================================= */
 
-app.options('*', cors(corsOptions));
+app.options(
+  '*',
+  cors(corsOptions)
+);
 
 /* =========================================================
    WEBHOOKS MONEROO
@@ -239,11 +251,8 @@ app.options('*', cors(corsOptions));
 
 /*
  * IMPORTANT :
- * Le webhook reste avant express.json()
- * pour permettre à la route webhook de gérer
- * correctement le corps de la requête si nécessaire.
+ * Cette route est enregistrée AVANT express.json().
  */
-
 app.use(
   '/webhooks',
   webhooksRoutes
@@ -267,53 +276,58 @@ app.use(
 );
 
 /* =========================================================
-   ROOT
+   ROUTE RACINE
 ========================================================= */
 
-app.get('/', function (req, res) {
-  return res.json({
-    name: 'SellFlow AI API',
+app.get(
+  '/',
+  function (req, res) {
+    return res.json({
+      name: 'SellFlow AI API',
 
-    status: 'online',
+      status: 'online',
 
-    version: API_VERSION,
+      version: API_VERSION,
 
-    emailService: 'disabled',
+      emailService: 'disabled',
 
-    frontend: {
-      current:
-        'https://sellflowic.netlify.app',
+      resend: 'disabled',
 
-      legacy:
-        'https://sellflowme.netlify.app'
-    },
+      frontend: {
+        current:
+          'https://sellflowic.netlify.app',
 
-    endpoints: {
-      health:
-        'GET /health',
+        legacy:
+          'https://sellflowme.netlify.app'
+      },
 
-      auth:
-        '/auth',
+      endpoints: {
+        health:
+          'GET /health',
 
-      testAuth:
-        'GET /test-auth',
+        auth:
+          '/auth',
 
-      chariow:
-        '/chariow',
+        testAuth:
+          'GET /test-auth',
 
-      subscriptions:
-        subscriptionRoutes
-          ? '/subscriptions'
-          : 'non installé',
+        chariow:
+          '/chariow',
 
-      payments:
-        '/payments',
+        subscriptions:
+          subscriptionRoutes
+            ? '/subscriptions'
+            : 'non installé',
 
-      webhooks:
-        '/webhooks'
-    }
-  });
-});
+        payments:
+          '/payments',
+
+        webhooks:
+          '/webhooks'
+      }
+    });
+  }
+);
 
 /* =========================================================
    HEALTH
@@ -410,6 +424,14 @@ app.use(
    TEST AUTH
 ========================================================= */
 
+/*
+ * Cette route sert uniquement au diagnostic.
+ *
+ * Elle ne crée aucun compte.
+ * Elle ne vérifie aucun email.
+ * Elle n'utilise pas Resend.
+ */
+
 app.get(
   '/test-auth',
   async function (req, res) {
@@ -417,10 +439,20 @@ app.get(
       const db =
         database.getPool();
 
+      /*
+       * Test PostgreSQL.
+       */
       await db.query(
         'SELECT 1'
       );
 
+      /*
+       * Vérification de la table.
+       *
+       * IMPORTANT :
+       * Les backticks commencent AVANT SELECT
+       * et se terminent APRÈS table_name.
+       */
       const tableCheck =
         await db.query(`
           SELECT to_regclass(
@@ -458,6 +490,9 @@ app.get(
             : 'not-installed',
 
         emailService:
+          'disabled',
+
+        resend:
           'disabled',
 
         cors:
@@ -528,7 +563,7 @@ app.use(
 );
 
 /* =========================================================
-   START SERVER
+   DÉMARRAGE DU SERVEUR
 ========================================================= */
 
 async function startServer() {
@@ -551,25 +586,35 @@ async function startServer() {
     );
 
     /* -----------------------------------
-       DATABASE
+       CONNEXION DATABASE
     ----------------------------------- */
 
     console.log(
-      '🔌 Connexion PostgreSQL...'
+      '🔌 Connexion à PostgreSQL...'
     );
 
-    await database.testDatabaseConnection();
+    const databaseStatus =
+      await database.testDatabaseConnection();
+
+    if (
+      !databaseStatus ||
+      !databaseStatus.connected
+    ) {
+      throw new Error(
+        'Connexion PostgreSQL impossible.'
+      );
+    }
 
     console.log(
       '✅ PostgreSQL connecté.'
     );
 
     /* -----------------------------------
-       DATABASE INIT
+       INITIALISATION DATABASE
     ----------------------------------- */
 
     console.log(
-      '🗄️ Initialisation de la base...'
+      '🗄️ Initialisation de la base de données...'
     );
 
     await databaseInit.initDatabase();
@@ -579,7 +624,7 @@ async function startServer() {
     );
 
     /* -----------------------------------
-       SERVER
+       DÉMARRAGE HTTP
     ----------------------------------- */
 
     const server =
@@ -601,7 +646,7 @@ async function startServer() {
           );
 
           console.log(
-            '📦 API:',
+            '📦 Version API:',
             API_VERSION
           );
 
@@ -621,11 +666,12 @@ async function startServer() {
             '🔔 Webhook Moneroo: ACTIVÉ'
           );
 
-          /*
-           * RESEND SUPPRIMÉ.
-           */
           console.log(
             '📧 Service email: DÉSACTIVÉ'
+          );
+
+          console.log(
+            '🚫 Resend: DÉSACTIVÉ'
           );
 
           console.log(
@@ -671,6 +717,10 @@ async function startServer() {
         }
       );
 
+    /* -----------------------------------
+       ERREUR SERVEUR HTTP
+    ----------------------------------- */
+
     server.on(
       'error',
       function (error) {
@@ -690,6 +740,7 @@ async function startServer() {
         process.exit(1);
       }
     );
+
   } catch (error) {
     console.error(
       '======================================'
