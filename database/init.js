@@ -1,341 +1,506 @@
 const { getPool } = require('../config/database');
 
-/*
- * SellFlow AI — initialisation PostgreSQL
- *
- * IMPORTANT :
- * - Aucun SQL ne doit être écrit directement dans le JavaScript sans
- *   être entre quotes ou backticks.
- * - Ce fichier ne supprime aucune donnée existante.
- * - Il ajoute les tables/colonnes manquantes.
- * - La vérification e-mail est volontairement désactivée.
- * - Resend / envoi d'e-mails ne fait pas partie de ce fichier.
- */
-
 async function initDatabase() {
-  const pool = getPool();
+  const db = getPool();
 
-  console.log('🗄️ Initialisation PostgreSQL SellFlow...');
+  // =====================================================
+  // EXTENSION UUID / CRYPTO
+  // =====================================================
 
-  /*
-   * pgcrypto n'est pas obligatoire pour l'inscription actuelle,
-   * mais il reste utile pour les bases historiques de SellFlow.
-   */
-  try {
-    await pool.query(
-      'CREATE EXTENSION IF NOT EXISTS pgcrypto'
-    );
+  await db.query(`
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+  `);
 
-    console.log('✅ Extension pgcrypto disponible.');
-  } catch (error) {
-    console.warn(
-      '⚠️ pgcrypto non disponible, poursuite sans cette extension:',
-      error.message
-    );
-  }
+  // =====================================================
+  // TABLE USERS
+  // =====================================================
 
-  /*
-   * USERS
-   *
-   * Le champ id est TEXT pour rester compatible avec les installations
-   * historiques qui utilisent UUID ou identifiants texte.
-   */
-  await pool.query(`
+  await db.query(`
     CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      name VARCHAR(150),
-      email VARCHAR(320),
-      phone VARCHAR(50),
+      id UUID PRIMARY KEY,
+
+      name VARCHAR(120) NOT NULL,
+
+      email VARCHAR(255) NOT NULL,
+
+      phone VARCHAR(30),
+
       country VARCHAR(100),
-      dial_code VARCHAR(10),
-      phone_international VARCHAR(50),
 
       password_hash TEXT,
-      google_id VARCHAR(255),
-      auth_provider VARCHAR(30) DEFAULT 'password',
 
       email_verified BOOLEAN NOT NULL DEFAULT TRUE,
 
       plan VARCHAR(50) NOT NULL DEFAULT 'free',
-      billing VARCHAR(30) NOT NULL DEFAULT 'monthly',
-      subscription_status VARCHAR(30) NOT NULL DEFAULT 'active',
+
+      subscription_status VARCHAR(30)
+        NOT NULL DEFAULT 'inactive',
+
       subscription_started_at TIMESTAMPTZ,
+
       subscription_expires_at TIMESTAMPTZ,
 
-      /*
-       * Connexion Chariow persistante.
-       * Ces colonnes permettent de conserver la connexion entre
-       * plusieurs sessions sans redemander la clé API à chaque connexion.
-       */
-      chariow_api_key TEXT,
-      chariow_store_id TEXT,
-      chariow_store_name VARCHAR(255),
-      chariow_store_url TEXT,
-      chariow_connected BOOLEAN NOT NULL DEFAULT FALSE,
-      chariow_connected_at TIMESTAMPTZ,
-      chariow_last_sync_at TIMESTAMPTZ,
+      reminder_7_sent_at TIMESTAMPTZ,
 
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
+      reminder_3_sent_at TIMESTAMPTZ,
+
+      reminder_1_sent_at TIMESTAMPTZ,
+
+      expired_notice_sent_at TIMESTAMPTZ,
+
+      created_at TIMESTAMPTZ
+        NOT NULL DEFAULT NOW(),
+
+      updated_at TIMESTAMPTZ
+        NOT NULL DEFAULT NOW()
+    );
   `);
 
-  /*
-   * Ajout des colonnes manquantes pour les bases déjà existantes.
-   */
-  const userColumnQueries = [
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(150)`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(320)`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50)`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS country VARCHAR(100)`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS dial_code VARCHAR(10)`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_international VARCHAR(50)`,
+  // =====================================================
+  // COMPATIBILITÉ USERS
+  // =====================================================
 
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255)`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(30) DEFAULT 'password'`,
+  await db.query(`
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS name
+        VARCHAR(120);
 
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT TRUE`,
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS phone
+        VARCHAR(30);
 
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS plan VARCHAR(50) DEFAULT 'free'`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS billing VARCHAR(30) DEFAULT 'monthly'`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(30) DEFAULT 'active'`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_started_at TIMESTAMPTZ`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMPTZ`,
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS country
+        VARCHAR(100);
 
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS chariow_api_key TEXT`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS chariow_store_id TEXT`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS chariow_store_name VARCHAR(255)`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS chariow_store_url TEXT`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS chariow_connected BOOLEAN DEFAULT FALSE`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS chariow_connected_at TIMESTAMPTZ`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS chariow_last_sync_at TIMESTAMPTZ`,
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS password_hash
+        TEXT;
 
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`
-  ];
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS email_verified
+        BOOLEAN NOT NULL DEFAULT TRUE;
 
-  for (const query of userColumnQueries) {
-    await pool.query(query);
-  }
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS plan
+        VARCHAR(50) NOT NULL DEFAULT 'free';
 
-  /*
-   * Valeurs de sécurité pour les anciennes lignes.
-   */
-  await pool.query(`
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS subscription_status
+        VARCHAR(30) NOT NULL DEFAULT 'inactive';
+
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS subscription_started_at
+        TIMESTAMPTZ;
+
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS subscription_expires_at
+        TIMESTAMPTZ;
+
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS reminder_7_sent_at
+        TIMESTAMPTZ;
+
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS reminder_3_sent_at
+        TIMESTAMPTZ;
+
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS reminder_1_sent_at
+        TIMESTAMPTZ;
+
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS expired_notice_sent_at
+        TIMESTAMPTZ;
+
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS created_at
+        TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS updated_at
+        TIMESTAMPTZ NOT NULL DEFAULT NOW();
+  `);
+
+  // =====================================================
+  // NORMALISATION DES EMAILS EXISTANTS
+  // =====================================================
+
+  await db.query(`
     UPDATE users
-    SET
-      email_verified = COALESCE(email_verified, TRUE),
-      plan = COALESCE(plan, 'free'),
-      billing = COALESCE(billing, 'monthly'),
-      subscription_status = COALESCE(subscription_status, 'active'),
-      chariow_connected = COALESCE(chariow_connected, FALSE),
-      created_at = COALESCE(created_at, NOW()),
-      updated_at = COALESCE(updated_at, NOW())
-    WHERE
-      email_verified IS NULL
-      OR plan IS NULL
-      OR billing IS NULL
-      OR subscription_status IS NULL
-      OR chariow_connected IS NULL
-      OR created_at IS NULL
-      OR updated_at IS NULL
+    SET email = LOWER(TRIM(email))
+    WHERE email <> LOWER(TRIM(email));
   `);
 
-  /*
-   * UN SEUL COMPTE PAR E-MAIL
-   *
-   * On ne bloque pas le démarrage si une ancienne base contient déjà
-   * des doublons : on les signale et l'API /auth/register les refuse.
-   */
-  const duplicateEmails = await pool.query(`
-    SELECT LOWER(TRIM(email)) AS normalized_email, COUNT(*) AS count
-    FROM users
-    WHERE email IS NOT NULL
-      AND TRIM(email) <> ''
-    GROUP BY LOWER(TRIM(email))
-    HAVING COUNT(*) > 1
-    ORDER BY COUNT(*) DESC
+  // =====================================================
+  // ANCIENNE TABLE EMAIL
+  // CONSERVÉE POUR COMPATIBILITÉ
+  // =====================================================
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS email_verification_codes (
+      id UUID PRIMARY KEY,
+
+      user_id UUID
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+
+      email VARCHAR(255) NOT NULL,
+
+      code VARCHAR(10) NOT NULL,
+
+      expires_at TIMESTAMPTZ NOT NULL,
+
+      attempts INTEGER NOT NULL DEFAULT 0,
+
+      used BOOLEAN NOT NULL DEFAULT FALSE,
+
+      created_at TIMESTAMPTZ
+        NOT NULL DEFAULT NOW()
+    );
   `);
 
-  if (duplicateEmails.rows.length === 0) {
-    try {
-      await pool.query(`
-        CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_normalized
-        ON users (LOWER(TRIM(email)))
-        WHERE email IS NOT NULL
-          AND TRIM(email) <> ''
-      `);
+  // =====================================================
+  // REGISTRATION REQUESTS
+  // CONSERVÉE POUR COMPATIBILITÉ
+  // =====================================================
 
-      console.log('✅ Unicité e-mail PostgreSQL activée.');
-    } catch (error) {
-      console.warn(
-        '⚠️ Impossible de créer l’index unique des e-mails:',
-        error.message
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS registration_requests (
+      id UUID PRIMARY KEY,
+
+      name VARCHAR(120) NOT NULL,
+
+      email VARCHAR(255) NOT NULL,
+
+      phone VARCHAR(30) NOT NULL,
+
+      country VARCHAR(100) NOT NULL,
+
+      code_hash TEXT NOT NULL,
+
+      expires_at TIMESTAMPTZ NOT NULL,
+
+      attempts INTEGER NOT NULL DEFAULT 0,
+
+      verified BOOLEAN NOT NULL DEFAULT FALSE,
+
+      created_at TIMESTAMPTZ
+        NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // =====================================================
+  // SESSIONS
+  // =====================================================
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      id UUID PRIMARY KEY,
+
+      user_id UUID NOT NULL
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+
+      token_hash TEXT NOT NULL,
+
+      expires_at TIMESTAMPTZ NOT NULL,
+
+      created_at TIMESTAMPTZ
+        NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // =====================================================
+  // PAYMENTS
+  // =====================================================
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS payments (
+      id UUID PRIMARY KEY
+        DEFAULT gen_random_uuid(),
+
+      user_id UUID NOT NULL
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+
+      provider VARCHAR(50) NOT NULL
+        DEFAULT 'moneroo',
+
+      provider_reference VARCHAR(255),
+
+      plan VARCHAR(50) NOT NULL,
+
+      billing_cycle VARCHAR(20) NOT NULL
+        DEFAULT 'monthly',
+
+      amount NUMERIC(12,2) NOT NULL,
+
+      currency VARCHAR(10) NOT NULL
+        DEFAULT 'XOF',
+
+      status VARCHAR(50) NOT NULL
+        DEFAULT 'pending',
+
+      checkout_url TEXT,
+
+      paid_at TIMESTAMPTZ,
+
+      failure_reason TEXT,
+
+      metadata JSONB NOT NULL
+        DEFAULT '{}'::jsonb,
+
+      created_at TIMESTAMPTZ
+        NOT NULL DEFAULT NOW(),
+
+      updated_at TIMESTAMPTZ
+        NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // =====================================================
+  // COMPATIBILITÉ PAYMENTS
+  // =====================================================
+
+  await db.query(`
+    ALTER TABLE payments
+      ADD COLUMN IF NOT EXISTS provider
+        VARCHAR(50) NOT NULL DEFAULT 'moneroo';
+
+    ALTER TABLE payments
+      ADD COLUMN IF NOT EXISTS provider_reference
+        VARCHAR(255);
+
+    ALTER TABLE payments
+      ADD COLUMN IF NOT EXISTS billing_cycle
+        VARCHAR(20) NOT NULL DEFAULT 'monthly';
+
+    ALTER TABLE payments
+      ADD COLUMN IF NOT EXISTS checkout_url
+        TEXT;
+
+    ALTER TABLE payments
+      ADD COLUMN IF NOT EXISTS paid_at
+        TIMESTAMPTZ;
+
+    ALTER TABLE payments
+      ADD COLUMN IF NOT EXISTS failure_reason
+        TEXT;
+
+    ALTER TABLE payments
+      ADD COLUMN IF NOT EXISTS metadata
+        JSONB DEFAULT '{}'::jsonb;
+
+    ALTER TABLE payments
+      ADD COLUMN IF NOT EXISTS updated_at
+        TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+    ALTER TABLE payments
+      ALTER COLUMN id
+        SET DEFAULT gen_random_uuid();
+
+    UPDATE payments
+    SET metadata = '{}'::jsonb
+    WHERE metadata IS NULL;
+
+    ALTER TABLE payments
+      ALTER COLUMN metadata
+        SET DEFAULT '{}'::jsonb;
+
+    ALTER TABLE payments
+      ALTER COLUMN metadata
+        SET NOT NULL;
+  `);
+
+  // =====================================================
+  // CHARIOW
+  // =====================================================
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS chariow_connections (
+      id UUID PRIMARY KEY,
+
+      user_id UUID NOT NULL
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+
+      api_key TEXT NOT NULL,
+
+      store_id VARCHAR(255),
+
+      store_name VARCHAR(255),
+
+      store_url TEXT,
+
+      connected BOOLEAN NOT NULL DEFAULT FALSE,
+
+      active BOOLEAN NOT NULL DEFAULT FALSE,
+
+      last_sync_at TIMESTAMPTZ,
+
+      last_sync_status VARCHAR(50),
+
+      last_sync_error TEXT,
+
+      created_at TIMESTAMPTZ
+        NOT NULL DEFAULT NOW(),
+
+      updated_at TIMESTAMPTZ
+        NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // =====================================================
+  // COMPATIBILITÉ CHARIOW
+  // =====================================================
+
+  await db.query(`
+    ALTER TABLE chariow_connections
+      ADD COLUMN IF NOT EXISTS active
+        BOOLEAN NOT NULL DEFAULT FALSE;
+
+    ALTER TABLE chariow_connections
+      ADD COLUMN IF NOT EXISTS last_sync_at
+        TIMESTAMPTZ;
+
+    ALTER TABLE chariow_connections
+      ADD COLUMN IF NOT EXISTS last_sync_status
+        VARCHAR(50);
+
+    ALTER TABLE chariow_connections
+      ADD COLUMN IF NOT EXISTS last_sync_error
+        TEXT;
+
+    ALTER TABLE chariow_connections
+      ADD COLUMN IF NOT EXISTS updated_at
+        TIMESTAMPTZ NOT NULL DEFAULT NOW();
+  `);
+
+  // =====================================================
+  // INDEX
+  // =====================================================
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_users_email
+      ON users(email);
+
+    CREATE INDEX IF NOT EXISTS idx_verification_email
+      ON email_verification_codes(email);
+
+    CREATE INDEX IF NOT EXISTS idx_registration_requests_email
+      ON registration_requests(email);
+
+    CREATE INDEX IF NOT EXISTS idx_sessions_user
+      ON sessions(user_id);
+
+    CREATE INDEX IF NOT EXISTS idx_payments_user
+      ON payments(user_id);
+
+    CREATE INDEX IF NOT EXISTS idx_payments_status
+      ON payments(status);
+
+    CREATE INDEX IF NOT EXISTS idx_payments_provider_reference
+      ON payments(provider_reference);
+
+    CREATE INDEX IF NOT EXISTS idx_payments_created_at
+      ON payments(created_at);
+
+    CREATE INDEX IF NOT EXISTS idx_payments_user_status
+      ON payments(user_id, status);
+
+    CREATE INDEX IF NOT EXISTS idx_chariow_user
+      ON chariow_connections(user_id);
+
+    CREATE INDEX IF NOT EXISTS idx_chariow_active
+      ON chariow_connections(user_id, active);
+
+    CREATE INDEX IF NOT EXISTS idx_users_subscription_expiry
+      ON users(subscription_expires_at);
+  `);
+
+  // =====================================================
+  // UNICITÉ RÉELLE DES EMAILS
+  // =====================================================
+
+  try {
+    await db.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_idx
+        ON users (LOWER(TRIM(email)));
+    `);
+
+    console.log(
+      '✅ Unicité des emails activée.'
+    );
+  } catch (error) {
+    if (error && error.code === '23505') {
+      console.error('');
+      console.error(
+        '===================================================='
       );
+      console.error(
+        "❌ DOUBLON D'EMAIL DÉTECTÉ DANS LA BASE"
+      );
+      console.error(
+        '===================================================='
+      );
+      console.error(
+        'Deux comptes existants utilisent la même adresse'
+      );
+      console.error(
+        'après normalisation majuscules/espaces.'
+      );
+      console.error(
+        'Aucun compte n’a été supprimé automatiquement.'
+      );
+      console.error(
+        'Supprime ou fusionne les doublons avant de relancer.'
+      );
+      console.error(
+        '===================================================='
+      );
+      console.error('');
     }
-  } else {
-    console.warn(
-      `⚠️ ${duplicateEmails.rows.length} e-mail(s) dupliqué(s) existent déjà dans users.`
-    );
 
-    console.warn(
-      'ℹ️ Aucun compte existant n’est supprimé automatiquement.'
-    );
+    throw error;
   }
 
-  /*
-   * CONNEXIONS CHARIOW
-   */
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS chariow_connections (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      api_key TEXT,
-      store_id TEXT,
-      store_name VARCHAR(255),
-      store_url TEXT,
-      connected BOOLEAN NOT NULL DEFAULT TRUE,
-      connected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      last_sync_at TIMESTAMPTZ,
-      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
+  // =====================================================
+  // FIN
+  // =====================================================
 
-  await pool.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS chariow_connections_user_unique
-    ON chariow_connections (user_id)
-  `);
+  console.log(
+    '=============================================='
+  );
 
-  /*
-   * SUBSCRIPTIONS
-   */
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS subscriptions (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      plan VARCHAR(50) NOT NULL,
-      billing VARCHAR(30) NOT NULL DEFAULT 'monthly',
-      status VARCHAR(30) NOT NULL DEFAULT 'active',
-      provider VARCHAR(50),
-      external_subscription_id TEXT,
-      amount NUMERIC(14,2),
-      currency VARCHAR(10) NOT NULL DEFAULT 'XOF',
-      started_at TIMESTAMPTZ,
-      expires_at TIMESTAMPTZ,
-      cancelled_at TIMESTAMPTZ,
-      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
+  console.log(
+    '✅ Base de données SellFlow initialisée.'
+  );
 
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS subscriptions_user_id_idx
-    ON subscriptions (user_id)
-  `);
+  console.log(
+    '✅ Emails normalisés automatiquement.'
+  );
 
-  /*
-   * PAYMENTS
-   */
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS payments (
-      id TEXT PRIMARY KEY,
-      user_id TEXT,
-      plan VARCHAR(50),
-      billing VARCHAR(30),
-      amount NUMERIC(14,2),
-      currency VARCHAR(10) NOT NULL DEFAULT 'XOF',
-      status VARCHAR(30) NOT NULL DEFAULT 'pending',
-      payment_method VARCHAR(50),
-      provider VARCHAR(50),
-      transaction_id TEXT,
-      external_payment_id TEXT,
-      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-      paid_at TIMESTAMPTZ,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
+  console.log(
+    '✅ Inscription directe activée.'
+  );
 
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS payments_user_id_idx
-    ON payments (user_id)
-  `);
+  console.log(
+    '✅ Vérification email non requise.'
+  );
 
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS payments_transaction_id_idx
-    ON payments (transaction_id)
-  `);
+  console.log(
+    '✅ Resend non utilisé.'
+  );
 
-  /*
-   * WEBHOOKS
-   */
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS webhook_events (
-      id TEXT PRIMARY KEY,
-      provider VARCHAR(50),
-      event_type VARCHAR(150),
-      external_event_id TEXT,
-      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-      processed BOOLEAN NOT NULL DEFAULT FALSE,
-      processed_at TIMESTAMPTZ,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
+  console.log(
+    '✅ Connexion Chariow persistante.'
+  );
 
-  /*
-   * Demande d'inscription / compatibilité avec l'ancien système.
-   *
-   * Cette table existe uniquement pour compatibilité technique.
-   * Aucun code e-mail n'est envoyé.
-   */
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS registration_requests (
-      id TEXT PRIMARY KEY,
-      name VARCHAR(150),
-      email VARCHAR(320),
-      phone VARCHAR(50),
-      country VARCHAR(100),
-      dial_code VARCHAR(10),
-      phone_international VARCHAR(50),
-      password_hash TEXT,
+  console.log(
+    '=============================================='
+  );
 
-      verified BOOLEAN NOT NULL DEFAULT TRUE,
-      verification_token TEXT,
-
-      plan VARCHAR(50) DEFAULT 'free',
-      billing VARCHAR(30) DEFAULT 'monthly',
-
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  /*
-   * Index utiles.
-   */
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS users_google_id_idx
-    ON users (google_id)
-    WHERE google_id IS NOT NULL
-  `);
-
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS users_chariow_store_id_idx
-    ON users (chariow_store_id)
-    WHERE chariow_store_id IS NOT NULL
-  `);
-
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS registration_requests_email_idx
-    ON registration_requests (LOWER(TRIM(email)))
-    WHERE email IS NOT NULL
-  `);
-
-  console.log('✅ Base PostgreSQL SellFlow initialisée.');
   return true;
 }
 
