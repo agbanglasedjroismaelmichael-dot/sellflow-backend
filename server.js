@@ -11,6 +11,10 @@ const chariowRoutes = require('./routes/chariow');
 const paymentsRoutes = require('./routes/payments');
 const webhooksRoutes = require('./routes/webhooks');
 
+/* =========================================================
+APPLICATION
+========================================================= */
+
 const app = express();
 
 const PORT = Number(process.env.PORT) || 4000;
@@ -25,6 +29,7 @@ let startSubscriptionReminderWorker = null;
 
 try {
 subscriptionRoutes = require('./routes/subscriptions');
+
 console.log('✅ routes/subscriptions.js chargé.');
 } catch (error) {
 console.log('ℹ️ routes/subscriptions.js non installé.');
@@ -35,7 +40,8 @@ const subscriptionService = require('./services/subscriptions');
 
 if (
 subscriptionService &&
-typeof subscriptionService.startSubscriptionReminderWorker === 'function'
+typeof subscriptionService.startSubscriptionReminderWorker ===
+'function'
 ) {
 startSubscriptionReminderWorker =
 subscriptionService.startSubscriptionReminderWorker;
@@ -67,12 +73,12 @@ const normalizedAllowedOrigins = [
 ...new Set(
 allowedOrigins
 .filter(Boolean)
-.map((origin) =>
-String(origin)
+.map(function (origin) {
+return String(origin)
 .trim()
 .replace(//+$/, '')
-.toLowerCase()
-)
+.toLowerCase();
+})
 )
 ];
 
@@ -80,6 +86,10 @@ console.log(
 '🌐 Origines CORS autorisées:',
 normalizedAllowedOrigins
 );
+
+/* =========================================================
+VÉRIFICATION CORS
+========================================================= */
 
 function isAllowedOrigin(origin) {
 if (!origin) {
@@ -91,7 +101,11 @@ const normalizedOrigin = String(origin)
 .replace(//+$/, '')
 .toLowerCase();
 
-if (normalizedAllowedOrigins.includes(normalizedOrigin)) {
+if (
+normalizedAllowedOrigins.includes(
+normalizedOrigin
+)
+) {
 return true;
 }
 
@@ -119,14 +133,22 @@ return false;
 }
 
 if (
-normalizedOrigin.startsWith('http://localhost:') ||
-normalizedOrigin.startsWith('http://127.0.0.1:')
+normalizedOrigin.startsWith(
+'http://localhost:'
+) ||
+normalizedOrigin.startsWith(
+'http://127.0.0.1:'
+)
 ) {
 return true;
 }
 
 return false;
 }
+
+/* =========================================================
+CONFIGURATION CORS
+========================================================= */
 
 const corsOptions = {
 origin: function (origin, callback) {
@@ -168,13 +190,20 @@ exposedHeaders: [
 ],
 
 credentials: true,
+
 optionsSuccessStatus: 204,
+
 maxAge: 86400
 };
 
-app.use(cors(corsOptions));
+app.use(
+cors(corsOptions)
+);
 
-app.options('*', cors(corsOptions));
+app.options(
+'*',
+cors(corsOptions)
+);
 
 /* =========================================================
 WEBHOOKS MONEROO
@@ -211,27 +240,47 @@ app.get(
 function (req, res) {
 return res.json({
 name: 'SellFlow AI API',
-status: 'online',
-version: API_VERSION,
-emailService: 'disabled',
-resend: 'disabled',
 
 ```
+  status: 'online',
+
+  version: API_VERSION,
+
+  emailService: 'disabled',
+
+  resend: 'disabled',
+
   frontend: {
-    current: 'https://sellflowic.netlify.app',
-    legacy: 'https://sellflowme.netlify.app'
+    current:
+      'https://sellflowic.netlify.app',
+
+    legacy:
+      'https://sellflowme.netlify.app'
   },
 
   endpoints: {
-    health: 'GET /health',
-    auth: '/auth',
-    testAuth: 'GET /test-auth',
-    chariow: '/chariow',
-    subscriptions: subscriptionRoutes
-      ? '/subscriptions'
-      : 'non installé',
-    payments: '/payments',
-    webhooks: '/webhooks'
+    health:
+      'GET /health',
+
+    auth:
+      '/auth',
+
+    testAuth:
+      'GET /test-auth',
+
+    chariow:
+      '/chariow',
+
+    subscriptions:
+      subscriptionRoutes
+        ? '/subscriptions'
+        : 'non installé',
+
+    payments:
+      '/payments',
+
+    webhooks:
+      '/webhooks'
   }
 });
 ```
@@ -253,12 +302,20 @@ await database.testDatabaseConnection();
 ```
   return res.json({
     ok: true,
-    service: 'sellflow-backend',
-    version: API_VERSION,
-    database: result.connected
-      ? 'connected'
-      : 'disconnected',
-    time: new Date().toISOString()
+
+    service:
+      'sellflow-backend',
+
+    version:
+      API_VERSION,
+
+    database:
+      result.connected
+        ? 'connected'
+        : 'disconnected',
+
+    time:
+      new Date().toISOString()
   });
 } catch (error) {
   console.error(
@@ -268,10 +325,18 @@ await database.testDatabaseConnection();
 
   return res.status(500).json({
     ok: false,
-    service: 'sellflow-backend',
-    version: API_VERSION,
-    database: 'disconnected',
-    error: error.message
+
+    service:
+      'sellflow-backend',
+
+    version:
+      API_VERSION,
+
+    database:
+      'disconnected',
+
+    error:
+      error.message
   });
 }
 ```
@@ -329,7 +394,9 @@ const db =
 database.getPool();
 
 ```
-  await db.query('SELECT 1');
+  await db.query(
+    'SELECT 1'
+  );
 
   const tableCheck =
     await db.query(
@@ -339,9 +406,11 @@ database.getPool();
   return res.json({
     ok: true,
 
-    authRoutes: 'enabled',
+    authRoutes:
+      'enabled',
 
-    database: 'connected',
+    database:
+      'connected',
 
     registrationRequestsTable:
       tableCheck.rows[0] &&
@@ -349,22 +418,28 @@ database.getPool();
         ? 'exists'
         : 'missing',
 
-    chariowRoutes: 'enabled',
+    chariowRoutes:
+      'enabled',
 
-    paymentRoutes: 'enabled',
+    paymentRoutes:
+      'enabled',
 
-    monerooWebhook: 'enabled',
+    monerooWebhook:
+      'enabled',
 
     subscriptionRoutes:
       subscriptionRoutes
         ? 'enabled'
         : 'not-installed',
 
-    emailService: 'disabled',
+    emailService:
+      'disabled',
 
-    resend: 'disabled',
+    resend:
+      'disabled',
 
-    cors: normalizedAllowedOrigins
+    cors:
+      normalizedAllowedOrigins
   });
 } catch (error) {
   console.error(
@@ -374,7 +449,9 @@ database.getPool();
 
   return res.status(500).json({
     ok: false,
-    error: error.message
+
+    error:
+      error.message
   });
 }
 ```
@@ -390,9 +467,16 @@ app.use(
 function (req, res) {
 return res.status(404).json({
 ok: false,
-error: 'ROUTE_NOT_FOUND',
-message: 'Route introuvable.'
+
+```
+  error:
+    'ROUTE_NOT_FOUND',
+
+  message:
+    'Route introuvable.'
 });
+```
+
 }
 );
 
@@ -416,7 +500,10 @@ return res.status(
   err.status || 500
 ).json({
   ok: false,
-  error: 'SERVER_ERROR',
+
+  error:
+    'SERVER_ERROR',
+
   message:
     err.message ||
     'Erreur serveur.'
@@ -450,6 +537,10 @@ console.log(
   '======================================'
 );
 
+/* -----------------------------------
+   POSTGRESQL
+----------------------------------- */
+
 console.log(
   '🔌 Connexion à PostgreSQL...'
 );
@@ -470,6 +561,10 @@ console.log(
   '✅ PostgreSQL connecté.'
 );
 
+/* -----------------------------------
+   DATABASE INIT
+----------------------------------- */
+
 console.log(
   '🗄️ Initialisation de la base de données...'
 );
@@ -479,6 +574,10 @@ await databaseInit.initDatabase();
 console.log(
   '✅ Base de données prête.'
 );
+
+/* -----------------------------------
+   HTTP SERVER
+----------------------------------- */
 
 const server =
   app.listen(
@@ -546,6 +645,10 @@ const server =
         '======================================'
       );
 
+      /* -----------------------------
+         WORKER ABONNEMENTS
+      ----------------------------- */
+
       if (
         typeof startSubscriptionReminderWorker ===
         'function'
@@ -565,6 +668,10 @@ const server =
       }
     }
   );
+
+/* -----------------------------------
+   SERVER ERROR
+----------------------------------- */
 
 server.on(
   'error',
