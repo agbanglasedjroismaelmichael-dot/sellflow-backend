@@ -62,10 +62,17 @@ try {
 ========================================================= */
 
 const allowedOrigins = [
+  /* FRONTEND ACTUEL */
+  'https://sellflowix.netlify.app',
+  'https://www.sellflowix.netlify.app',
+
+  /* ANCIENS FRONTENDS CONSERVÉS */
   'https://sellflowic.netlify.app',
   'https://www.sellflowic.netlify.app',
   'https://sellflowme.netlify.app',
   'https://www.sellflowme.netlify.app',
+
+  /* LOCALHOST */
   'http://localhost:3000',
   'http://localhost:5173',
   'http://127.0.0.1:3000',
@@ -107,6 +114,7 @@ function isAllowedOrigin(origin) {
       .replace(/\/+$/, '')
       .toLowerCase();
 
+  /* ORIGINES EXPLICITEMENT AUTORISÉES */
   if (
     normalizedAllowedOrigins.includes(
       normalizedOrigin
@@ -115,6 +123,7 @@ function isAllowedOrigin(origin) {
     return true;
   }
 
+  /* AUTRES FRONTENDS NETLIFY SELLFLOW */
   try {
     const url =
       new URL(normalizedOrigin);
@@ -129,6 +138,7 @@ function isAllowedOrigin(origin) {
         url.hostname.toLowerCase();
 
       if (
+        hostname.includes('sellflowix') ||
         hostname.includes('sellflowic') ||
         hostname.includes('sellflowme')
       ) {
@@ -139,6 +149,7 @@ function isAllowedOrigin(origin) {
     return false;
   }
 
+  /* LOCALHOST */
   if (
     normalizedOrigin.startsWith(
       'http://localhost:'
@@ -241,17 +252,23 @@ app.get(
   function (req, res) {
     return res.json({
       name: 'SellFlow AI API',
+
       status: 'online',
+
       version: API_VERSION,
 
       emailService: 'disabled',
+
       resend: 'disabled',
 
       frontend: {
         current:
-          'https://sellflowic.netlify.app',
+          'https://sellflowix.netlify.app',
 
         legacy:
+          'https://sellflowic.netlify.app',
+
+        previous:
           'https://sellflowme.netlify.app'
       },
 
@@ -306,6 +323,9 @@ app.get(
             ? 'connected'
             : 'disconnected',
 
+        frontend:
+          'https://sellflowix.netlify.app',
+
         time:
           new Date().toISOString()
       });
@@ -328,6 +348,9 @@ app.get(
 
         database:
           'disconnected',
+
+        frontend:
+          'https://sellflowix.netlify.app',
 
         error:
           error.message
@@ -419,6 +442,9 @@ app.get(
 
         resend:
           'disabled',
+
+        frontend:
+          'https://sellflowix.netlify.app',
 
         cors:
           normalizedAllowedOrigins
@@ -612,7 +638,7 @@ async function startServer() {
 
           console.log(
             '🌐 Frontend:',
-            'https://sellflowic.netlify.app'
+            'https://sellflowix.netlify.app'
           );
 
           if (
