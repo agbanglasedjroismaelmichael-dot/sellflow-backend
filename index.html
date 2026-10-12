@@ -2457,6 +2457,14 @@ body.light-mode7 .sf-int-dialog input::placeholder{color:#6f7885!important}
  #sfChariowLock .sf-ch-lock-card{width:100%!important;max-height:calc(100dvh - 16px)!important;overflow:auto!important;box-sizing:border-box!important;padding:18px!important}
 }
 </style>
+
+<style id="sf-hide-starter">
+.sf-sub17-plan[data-plan="starter"],
+.sf-ob-plan[data-plan="starter"],
+.sf-plan[data-plan="starter"],
+article[data-plan="starter"]{display:none!important}
+</style>
+
 </head>
 <body>
 
@@ -2863,33 +2871,23 @@ body:not(.light-mode7) .sf-entry-theme-btn{
       <h2>Choisis ton offre</h2>
       <p>Pour créer ton compte, commence par sélectionner un plan. Tu pourras payer en toute sécurité juste après.</p>
       <div class="sf-ob-plans">
-        <button type="button" class="sf-ob-plan active" data-plan="starter" onclick="sfObSelectPlan('starter',this)">
-          <b>Starter</b>
-          <div class="price">3 500 <span>FCFA / mois</span></div>
-          <small>Pour démarrer simplement ton activité.</small>
-          <ul>
-            <li>CRM de base</li>
-            <li>Suivi des prospects</li>
-            <li>1 boutique connectée</li>
-          </ul>
-        </button>
-        <button type="button" class="sf-ob-plan" data-plan="pro" onclick="sfObSelectPlan('pro',this)">
+        <button type="button" class="sf-ob-plan active" data-plan="pro" onclick="sfObSelectPlan('pro',this)">
           <b>Pro</b>
-          <div class="price">9 900 <span>FCFA / mois</span></div>
+          <div class="price">5 500 <span>FCFA / mois</span></div>
           <small>Idéal pour structurer et automatiser tes ventes.</small>
           <ul>
             <li>CRM & prospects</li>
             <li>Automatisations</li>
-            <li>Intégrations principales</li>
+            <li>3 boutiques · IA</li>
           </ul>
         </button>
         <button type="button" class="sf-ob-plan" data-plan="business" onclick="sfObSelectPlan('business',this)">
           <b>Business</b>
-          <div class="price">29 900 <span>FCFA / mois</span></div>
+          <div class="price">10 500 <span>FCFA / mois</span></div>
           <small>Pour les équipes et un volume plus élevé.</small>
           <ul>
             <li>Tout Pro inclus</li>
-            <li>Automatisations avancées</li>
+            <li>10 boutiques</li>
             <li>Support prioritaire</li>
           </ul>
         </button>
@@ -2907,7 +2905,7 @@ body:not(.light-mode7) .sf-entry-theme-btn{
       <div class="sf-ob-summary">
         <div><span>Offre</span><b id="obSumPlan">Pro</b></div>
         <div id="obPromoSummaryRow" style="display:none"><span>Code promo</span><b id="obPromoSummary">—</b></div>
-        <div><span>Total</span><b id="obSumTotal">9 900 FCFA</b></div>
+        <div><span>Total</span><b id="obSumTotal">5 500 FCFA</b></div>
       </div>
       <div class="sf-ob-field"><label>Nom complet</label><input id="obPayName" type="text" placeholder="Ton nom" autocomplete="name" required></div>
       <div class="sf-ob-field"><label>Numéro de téléphone</label><input id="obPayPhone" type="tel" placeholder="+225 …" autocomplete="tel" required></div>
@@ -2959,11 +2957,11 @@ body:not(.light-mode7) .sf-entry-theme-btn{
 </div>
 <script id="sf-onboard-js">
 (function(){
-  let plan='starter', method='mobile', promoApplied=false;
-  const prices={starter:3500,pro:9900,business:29900};
+  let plan='pro', method='mobile', promoApplied=false;
+  const prices={pro:5500,business:10500};
   const PROMO_CODE='BLACKING';
 
-  const names={starter:'Starter',pro:'Pro',business:'Business'};
+  const names={pro:'Pro',business:'Business'};
   function panel(id){
     document.querySelectorAll('#sfOnboard .sf-onboard-panel').forEach(p=>p.classList.remove('active'));
     document.getElementById(id)?.classList.add('active');
@@ -2976,7 +2974,7 @@ body:not(.light-mode7) .sf-entry-theme-btn{
   window.sfOpenOnboard=function(){
     const m=document.getElementById('sfOnboard');
     if(!m)return;
-    plan='starter';method='mobile';promoApplied=false;
+    plan='pro';method='mobile';promoApplied=false;
     const promoInput=document.getElementById('obPromoCode');
     const promoMsg=document.getElementById('obPromoMsg');
     const promoBox=document.querySelector('.sf-ob-promo');
@@ -2987,7 +2985,7 @@ body:not(.light-mode7) .sf-entry-theme-btn{
     if(promoSummaryRow)promoSummaryRow.style.display='none';
     const promoBtn=document.getElementById('obPromoBtn');
     if(promoBtn){promoBtn.textContent='Appliquer';promoBtn.disabled=false;}
-    document.querySelectorAll('.sf-ob-plan').forEach(b=>b.classList.toggle('active',b.dataset.plan==='starter'));
+    document.querySelectorAll('.sf-ob-plan').forEach(b=>b.classList.toggle('active',b.dataset.plan==='pro'));
     panel('obPanelPlan');
     m.classList.add('open'); m.setAttribute('aria-hidden','false');
   };
@@ -3324,7 +3322,7 @@ body:not(.light-mode7) .sf-entry-theme-btn{
 </section>
 
 <section class="page" id="page-products">
-  <div class="page-head"><div><div class="eyebrow">CATALOGUE</div><h1>Produits</h1><p>Gère tes offres, prix et performances sans les mélanger avec tes commandes.</p></div><button class="btn primary" onclick="toast('Formulaire de création de produit ouvert')">＋ Nouveau produit</button></div>
+  <div class="page-head"><div><div class="eyebrow">CATALOGUE</div><h1>Produits</h1><p>Gère tes offres, prix et performances sans les mélanger avec tes commandes.</p></div><button class="btn primary" onclick="window.sfOpenNewProduct&&window.sfOpenNewProduct()">＋ Nouveau produit</button></div>
   <div class="grid products">
     <div class="card product"><div class="product-cover">🎨</div><h4>Pack Dessins Animés Islamiques</h4><p>Contenu éducatif pour enfants</p><div class="product-foot"><span class="price">4 900 F</span><span class="tag">ACTIF</span></div></div>
     <div class="card product"><div class="product-cover">🤖</div><h4>VEO Creator System</h4><p>Création vidéo avec IA</p><div class="product-foot"><span class="price">7 500 F</span><span class="tag">ACTIF</span></div></div>
@@ -3333,7 +3331,7 @@ body:not(.light-mode7) .sf-entry-theme-btn{
 </section>
 
 <section class="page" id="page-orders">
-  <div class="page-head"><div><div class="eyebrow">TRANSACTIONS</div><h1>Commandes</h1><p>Suivi des paiements, statuts et clients. Les commandes restent séparées du CRM.</p></div><button class="btn" onclick="toast('Export des commandes préparé')">↓ Exporter</button></div>
+  <div class="page-head"><div><div class="eyebrow">TRANSACTIONS</div><h1>Commandes</h1><p>Suivi des paiements, statuts et clients. Les commandes restent séparées du CRM.</p></div><button class="btn" onclick="window.sfExportOrders&&window.sfExportOrders()">↓ Exporter</button></div>
   <div class="card table-wrap"><table class="table"><thead><tr><th>Client</th><th>Produit</th><th>Montant</th><th>Statut</th><th>Date</th></tr></thead><tbody>
     <tr><td><div class="person"><div class="mini">SA</div><b>Sarah A.</b></div></td><td>Pack Noor</td><td>4 900 F</td><td><span class="status s-good">Payé</span></td><td>Aujourd'hui 11:42</td></tr>
     <tr><td><div class="person"><div class="mini">DK</div><b>David K.</b></div></td><td>VEO Creator</td><td>7 500 F</td><td><span class="status s-warn">Abandonné</span></td><td>Aujourd'hui 11:20</td></tr>
@@ -3445,9 +3443,9 @@ body:not(.light-mode7) .sf-entry-theme-btn{
   <div class="sf-v23-annual-note" style="text-align:center;margin-bottom:12px">Annuel = montant total payé une seule fois pour 12 mois.</div>
   <div id="sfAnnualOfferBanner" class="sf-annual-offer-banner" role="note"><strong>💜 Offre annuelle</strong><span>Choisis <b>Annuel</b> pour voir les tarifs annuels et payer une fois pour 12 mois.</span><button type="button" onclick="setBilling17('yearly')">Voir les tarifs annuels →</button></div>
   <div class="sf-sub17-plans">
-<article class="sf-sub17-plan" data-plan="starter"><div class="sf-sub17-plan-top"><span class="sf-sub17-label">ESSENTIEL</span><span class="sf-sub17-state" id="sfStateStarter"></span></div><h2>Starter</h2><p>Pour démarrer simplement et organiser ton activité.</p><div class="sf-sub17-price"><b id="sfStarterPrice">3 500</b><span id="sfStarterUnit">FCFA / mois</span></div><button class="sf-sub17-choose" onclick="choosePlan17('starter')">Passer à Starter</button><ul><li>CRM de base</li><li>Suivi des prospects</li><li>1 boutique connectée</li><li>Tableau de bord</li><li>Support standard</li></ul></article>
-<article class="sf-sub17-plan featured" data-plan="pro"><div class="sf-sub17-plan-top"><span class="sf-sub17-label">LE PLUS CHOISI</span><span class="sf-sub17-state" id="sfStatePro"></span></div><h2>Pro</h2><p>Pour vendre plus, automatiser et centraliser ses canaux.</p><div class="sf-sub17-price"><b id="sfProPrice">9 900</b><span id="sfProUnit">FCFA / mois</span></div><button class="sf-sub17-choose primary" onclick="choosePlan17('pro')">Passer à Pro</button><ul><li>Boutiques et intégrations avancées</li><li>Contacts et commandes étendus</li><li>Automatisations avancées</li><li>IA commerciale & connaissances</li><li>Analytics avancés</li><li>Support prioritaire</li></ul></article>
-    <article class="sf-sub17-plan" data-plan="business"><div class="sf-sub17-plan-top"><span class="sf-sub17-label">ÉQUIPE</span><span class="sf-sub17-state" id="sfStateBusiness"></span></div><h2>Business</h2><p>Pour une activité structurée avec besoins plus importants.</p><div class="sf-sub17-price"><b id="sfBizPrice">29 900</b><span id="sfBizUnit">FCFA / mois</span></div><button class="sf-sub17-choose" onclick="choosePlan17('business')">Passer à Business</button><ul><li>Volume élevé</li><li>Automatisations sans limites pratiques</li><li>Analytics & rapports avancés</li><li>Connexions API avancées</li><li>Fonctions commerciales premium</li><li>Support prioritaire renforcé</li></ul></article>
+
+<article class="sf-sub17-plan featured" data-plan="pro"><div class="sf-sub17-plan-top"><span class="sf-sub17-label">LE PLUS CHOISI</span><span class="sf-sub17-state" id="sfStatePro"></span></div><h2>Pro</h2><p>Pour vendre plus, automatiser et centraliser ses canaux.</p><div class="sf-sub17-price"><b id="sfProPrice">5 500</b><span id="sfProUnit">FCFA / mois</span></div><button class="sf-sub17-choose primary" onclick="choosePlan17('pro')">Passer à Pro</button><ul><li>Boutiques et intégrations avancées</li><li>Contacts et commandes étendus</li><li>Automatisations avancées</li><li>IA commerciale & connaissances</li><li>Analytics avancés</li><li>Support prioritaire</li></ul></article>
+    <article class="sf-sub17-plan" data-plan="business"><div class="sf-sub17-plan-top"><span class="sf-sub17-label">ÉQUIPE</span><span class="sf-sub17-state" id="sfStateBusiness"></span></div><h2>Business</h2><p>Pour une activité structurée avec besoins plus importants.</p><div class="sf-sub17-price"><b id="sfBizPrice">10 500</b><span id="sfBizUnit">FCFA / mois</span></div><button class="sf-sub17-choose" onclick="choosePlan17('business')">Passer à Business</button><ul><li>Volume élevé</li><li>Automatisations sans limites pratiques</li><li>Analytics & rapports avancés</li><li>Connexions API avancées</li><li>Fonctions commerciales premium</li><li>Support prioritaire renforcé</li></ul></article>
   </div>
   <div class="sf-sub17-lower"><div class="sf-sub17-card"><div><b>Paiement sécurisé</b><small>Le paiement sera effectué via le moyen disponible au moment de la souscription.</small></div><div class="sf-sub17-methods"><span>VISA</span><span>Mastercard</span><span>MTN MoMo</span><span>Moov Money</span></div></div><div class="sf-sub17-card"><div><b>Gérer mon abonnement</b><small id="sfSub17ManageText">Aucun abonnement actif.</small></div><button class="sf-sub17-manage" onclick="manageSubscription17()">Gérer</button></div></div>
 </section>
@@ -3729,10 +3727,27 @@ function simulateAutomation(type){
     'payment-failed':['Paiement échoué','Échec détecté → assistance préparée → suivi activé.']
   };
   const item=labels[type]||['Automation','Scénario exécuté en mode test.'];
+  if(typeof automationState==='undefined'){ window.automationState={}; }
   automationState[type]={status:'completed',at:Date.now()};
   toast('✓ '+item[0]+' · '+item[1]);
   const status=document.querySelector('[data-automation-test-status]');
   if(status) status.textContent='Dernier test : '+item[0]+' · maintenant';
+  const res=document.getElementById('sf-automation-result');
+  if(res){
+    res.style.display='block';
+    res.style.marginTop='10px';
+    res.style.padding='12px';
+    res.style.borderRadius='12px';
+    res.style.border='1px solid #35d58a44';
+    res.style.background='#35d58a12';
+    res.style.color='#9aefc0';
+    res.style.fontSize='11px';
+    res.innerHTML='<b>✓ Test réussi · '+item[0]+'</b><br><span style="color:#a0a8bb">'+item[1]+'</span><br><small style="color:#68718a">'+new Date().toLocaleString('fr-FR')+' · simulation locale (aucun message réel envoyé)</small>';
+  }
+  // Also surface in action modal for payment-failed
+  if(type==='payment-failed' && typeof openAction==='function'){
+    setTimeout(function(){ openAction('payment','Client test'); }, 400);
+  }
 }
 
 function openSettingsSection(section){
@@ -3835,7 +3850,13 @@ function closeHotProfile(){
 }
 
 function relanceFromProfile(){
-  toast('Relance préparée · aucune configuration modifiée');
+  const name=(document.getElementById('profileName')||{}).textContent||'Client';
+  const msg='Bonjour '+name+', je reviens vers vous concernant votre commande. Je peux vous aider à finaliser le paiement.';
+  if(typeof window.sfRelanceClient==='function'){
+    window.sfRelanceClient({name:name, message:msg});
+  } else {
+    toast('Relance préparée pour '+name);
+  }
   const e=document.getElementById('timelineRelance'); if(e)e.textContent='Relance préparée maintenant.';
 }
 
@@ -3915,7 +3936,33 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
 
   const resolve=document.getElementById('resolveAction');
-  if(resolve)resolve.addEventListener('click',()=>{toast('✓ Action résolue · étape suivante activée');closeAction();});
+  if(resolve)resolve.addEventListener('click',()=>{
+    const modal=document.getElementById('actionModal');
+    if(!modal)return;
+    const steps=modal.querySelectorAll('.action-stepper .step');
+    let activeIdx=-1;
+    steps.forEach((s,i)=>{if(s.classList.contains('active'))activeIdx=i});
+    if(activeIdx<0)activeIdx=0;
+    if(activeIdx < steps.length-1){
+      steps[activeIdx].classList.remove('active');
+      steps[activeIdx+1].classList.add('active');
+      const detail=document.getElementById('actionDetail');
+      if(activeIdx===0 && detail){
+        detail.innerHTML='<h4>Résolution en cours</h4><p>Préparation du message de relance et guidage vers une nouvelle tentative de paiement.</p><div class="suggested">Message prêt : « Bonjour, votre paiement n\'a pas abouti. Voici un lien pour finaliser votre commande en toute sécurité. »</div>';
+      } else if(activeIdx===1 && detail){
+        detail.innerHTML='<h4>Étape suivante</h4><p>Relance enregistrée. Le suivi automatique continue. Vous pouvez ouvrir la conversation WhatsApp si besoin.</p><div class="suggested">Action terminée · le prospect reste visible dans « À faire » jusqu\'à confirmation du paiement.</div>';
+      }
+      if(activeIdx===steps.length-2){
+        resolve.textContent='Terminer ✓';
+      }
+      toast('Étape '+(activeIdx+2)+' / '+steps.length);
+    } else {
+      toast('✓ Action résolue · suivi activé');
+      closeAction();
+      steps.forEach((s,i)=>s.classList.toggle('active',i===0));
+      resolve.textContent="Résoudre et passer à l'étape suivante →";
+    }
+  });
 
   const send=document.getElementById('sendChat'),input=document.getElementById('chatInput'),messages=document.getElementById('messages');
   function sendMsg(){
@@ -3935,12 +3982,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   const notify=document.getElementById('notifyBtn');
   if(notify)notify.addEventListener('click',()=>toast('3 notifications : 2 prospects chauds, 1 paiement échoué'));
 
-  document.querySelectorAll('button').forEach(btn=>{
-    if(btn.id==='reset-demo'||btn.id==='sendChat'||btn.id==='notifyBtn')return;
-    if(btn.getAttribute('onclick'))return;
-    if(btn.closest('.settings-nav')||btn.classList.contains('settings-nav-item'))return;
-    if(!btn.closest('.set-panel7'))btn.addEventListener('click',()=>toast('Action effectuée'));
-  });
+  // Catch-all removed: only explicit handlers should toast (prevents fake "Action effectuée")
+  
 
   const theme=sfStorageGet('sellflow-theme','dark');
   applyTheme(theme);
@@ -4451,10 +4494,10 @@ window.addEventListener('load',im16RefreshStore);
 <script id="sf-sub17-js">
 (function(){
 const KEY='sellflow_subscription_v17';let billing='monthly',chosen='pro',method='mobile';
-const plans={starter:{name:'Starter',m:3500,y:35000},pro:{name:'Pro',m:9900,y:99000},business:{name:'Business',m:29900,y:299000}};
+const plans={pro:{name:'Pro',m:5500,y:55000},business:{name:'Business',m:10500,y:105000}};
 function get(){try{return JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){return {}}}
 function save(x){localStorage.setItem(KEY,JSON.stringify(x))}
-window.setBilling17=function(v){billing=v;document.getElementById('sfSub17Monthly')?.classList.toggle('active',v==='monthly');document.getElementById('sfSub17Yearly')?.classList.toggle('active',v==='yearly');const sp=document.getElementById('sfStarterPrice');if(sp)sp.textContent=v==='monthly'?'3 500':'35 000';document.getElementById('sfProPrice').textContent=v==='monthly'?'9 900':'99 000';document.getElementById('sfBizPrice').textContent=v==='monthly'?'29 900':'299 000';update17()};
+window.setBilling17=function(v){billing=v;document.getElementById('sfSub17Monthly')?.classList.toggle('active',v==='monthly');document.getElementById('sfSub17Yearly')?.classList.toggle('active',v==='yearly');document.getElementById('sfProPrice').textContent=v==='monthly'?'5 500':'55 000';document.getElementById('sfBizPrice').textContent=v==='monthly'?'10 500':'105 000';update17()};
 window.choosePlan17=function(p){chosen=p;const pl=plans[p];document.getElementById('sfPay17').classList.add('open');document.getElementById('sfPay17').setAttribute('aria-hidden','false');document.getElementById('sfPay17Plan').textContent=pl.name;document.getElementById('sfPay17Cycle').textContent=billing==='monthly'?'Mensuelle':'Annuelle';document.getElementById('sfPay17Total').textContent=(billing==='monthly'?pl.m:pl.y).toLocaleString('fr-FR')+' FCFA';document.getElementById('sfPay17Sub').textContent='Passage à l’offre '+pl.name};
 window.closePay17=function(){document.getElementById('sfPay17')?.classList.remove('open');document.getElementById('sfPay17')?.setAttribute('aria-hidden','true');document.getElementById('sfPay17Form').style.display='block';document.getElementById('sfPay17Success').style.display='none'};
 window.selectPayMethod17=function(el){method=el.dataset.method;document.querySelectorAll('.sf-pay17-option').forEach(x=>x.classList.remove('active'));el.classList.add('active')};
@@ -4474,7 +4517,41 @@ function sf18Notify(msg){sf18AddLog(msg);toast('✓ '+msg)}
 function sf18SecurityChange(name,on){sf18AddLog(name+' · '+(on?'activé':'désactivé'));toast((on?'✓ Activé · ':'✓ Désactivé · ')+name);sf18UpdateScore()}
 function sf18UpdateScore(){const ids=['sf18Audit','sf18Lock','sf18Alerts'];const enabled=ids.filter(id=>document.getElementById(id)?.checked).length;const score=document.getElementById('sf18Score'),bar=document.getElementById('sf18Progress');if(score)score.textContent=(enabled+1)+' / 5';if(bar)bar.style.width=Math.min(100,(enabled+1)*20)+'%'}
 function sf18OpenLog(){sf18RenderLog();const el=document.getElementById('sf18Log');if(el)el.scrollIntoView({behavior:'smooth',block:'nearest'});toast('Journal de sécurité actualisé')}
-function sf18TwoFactor(){sf18AddLog('Ouverture de la configuration de la double authentification');toast('La double authentification sera finalisée avec le compte sécurisé SellFlow')}
+function sf18TwoFactor(){
+  sf18AddLog('Ouverture de la configuration de la double authentification');
+  var existing=document.getElementById('sf2faModal');
+  if(existing){existing.remove()}
+  var enabled=false;
+  try{enabled=localStorage.getItem('sellflow_2fa_enabled')==='1'}catch(e){}
+  var m=document.createElement('div');
+  m.id='sf2faModal';
+  m.style.cssText='position:fixed;inset:0;z-index:320;display:flex;align-items:center;justify-content:center;background:#000a;padding:16px';
+  m.innerHTML='<div style="background:#0e1422;border:1px solid #2b3551;border-radius:18px;padding:22px;width:min(440px,96vw);color:#fff;max-height:90vh;overflow:auto">'+
+    '<h3 style="margin:0 0 6px">Double authentification</h3>'+
+    '<p style="font-size:12px;color:#8992aa;line-height:1.55;margin:0 0 14px">Ajoute une seconde vérification à la connexion (code e-mail). Le serveur enverra un code à 6 chiffres après le mot de passe.</p>'+
+    '<div style="padding:12px;border:1px solid #2b3551;border-radius:12px;margin-bottom:14px;background:#111a2c">'+
+      '<b style="font-size:12px">État actuel</b>'+
+      '<p id="sf2faStatus" style="margin:6px 0 0;font-size:11px;color:'+(enabled?'#35d58a':'#ffbf5b')+'">'+(enabled?'✓ Activée sur cet appareil':'○ Non activée')+'</p>'+
+    '</div>'+
+    '<label style="display:flex;align-items:center;gap:10px;font-size:12px;margin-bottom:16px;cursor:pointer">'+
+      '<input type="checkbox" id="sf2faToggle" '+(enabled?'checked':'')+' style="width:18px;height:18px">'+
+      ' Activer la double authentification sur ce compte'+
+    '</label>'+
+    '<p style="font-size:10px;color:#68718a;margin:0 0 14px">Note : la validation complète du code se fait côté serveur lors de la prochaine connexion si l’endpoint 2FA est déployé.</p>'+
+    '<div style="display:flex;gap:8px">'+
+      '<button class="btn primary" style="flex:1" id="sf2faSave">Enregistrer</button>'+
+      '<button class="btn" style="flex:1" id="sf2faClose">Fermer</button>'+
+    '</div></div>';
+  document.body.appendChild(m);
+  document.getElementById('sf2faClose').onclick=function(){m.remove()};
+  document.getElementById('sf2faSave').onclick=function(){
+    var on=!!document.getElementById('sf2faToggle').checked;
+    try{localStorage.setItem('sellflow_2fa_enabled',on?'1':'0')}catch(e){}
+    toast(on?'✓ Double authentification activée':'Double authentification désactivée');
+    sf18AddLog(on?'2FA activée':'2FA désactivée');
+    m.remove();
+  };
+}
 function sf18Backup(){
   const payload={version:1,createdAt:new Date().toISOString(),app:'SellFlow AI',data:{}};
   try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.indexOf('sellflow')===0)payload.data[k]=localStorage.getItem(k)}}catch(e){}
@@ -4511,7 +4588,7 @@ document.addEventListener('DOMContentLoaded',sf18Init);
 .sf18-security-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0}.sf18-card,.sf18-section{border:1px solid var(--border,#e8e8ec);background:var(--card,#fff);border-radius:16px;padding:15px}.sf18-card{min-height:150px;display:flex;flex-direction:column;gap:7px}.sf18-card-top,.sf18-section-head,.sf18-backup-row,.sf18-danger{display:flex;align-items:center;justify-content:space-between;gap:12px}.sf18-icon{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:rgba(124,92,255,.1);font-weight:900}.sf18-card strong{font-size:20px}.sf18-card small,.sf18-section small,.sf18-action small,.sf18-danger small{opacity:.58;line-height:1.45}.sf18-progress{height:7px;border-radius:99px;background:#eceef2;overflow:hidden;margin-top:4px}.sf18-progress span{display:block;width:80%;height:100%;background:#7c5cff;border-radius:99px}.sf18-section{margin-top:12px}.sf18-section-head{margin-bottom:10px}.sf18-section-head b{display:block}.sf18-rule-list{display:grid;gap:2px}.sf18-backup-row{padding:12px 0}.sf18-log{display:grid;gap:8px;max-height:210px;overflow:auto}.sf18-log-item{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border,#eee)}.sf18-log-item:last-child{border-bottom:0}.sf18-log-dot{width:8px;height:8px;border-radius:50%;background:#7c5cff;margin-top:6px;flex:0 0 auto}.sf18-log-item b{display:block;font-size:12px}.sf18-log-item small{display:block;font-size:11px;opacity:.55;margin-top:2px}.sf18-log-empty{padding:18px;text-align:center;opacity:.5}.sf18-actions-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.sf18-action{text-align:left;padding:14px;border:1px solid var(--border,#e8e8ec);background:transparent;border-radius:14px;cursor:pointer;color:inherit}.sf18-action span{font-size:18px;display:block;margin-bottom:7px}.sf18-action b,.sf18-action small{display:block}.sf18-danger{margin-top:12px;padding:13px 14px;border:1px solid rgba(220,80,80,.2);background:rgba(220,80,80,.04);border-radius:14px}.dark .sf18-card,.dark .sf18-section{background:#15171b}.dark .sf18-action{background:#15171b}.dark .sf18-progress{background:#292c33}@media(max-width:850px){.sf18-security-grid{grid-template-columns:1fr}.sf18-actions-grid{grid-template-columns:1fr}.sf18-backup-row,.sf18-danger{align-items:flex-start;flex-direction:column}.sf18-backup-row .sf-test-actions{width:100%}.sf18-backup-row .btn,.sf18-danger .btn{width:100%}}
 </style>
 
-<div class="sf-pay17" id="sfPay17" aria-hidden="true"><div class="sf-pay17-back" onclick="closePay17()"></div><div class="sf-pay17-sheet"><div class="sf-pay17-head"><div><h2>Activer ton abonnement</h2><p id="sfPay17Sub">Passage à l’offre Pro</p></div><button class="sf-pay17-close" onclick="closePay17()">×</button></div><div id="sfPay17Form"><div class="sf-pay17-summary"><div><span>Offre</span><b id="sfPay17Plan">Pro</b></div><div><span>Facturation</span><b id="sfPay17Cycle">Mensuelle</b></div><div><span>Total</span><b id="sfPay17Total">9 900 FCFA</b></div></div><div class="sf-moneroo17-brand"><span class="sf-moneroo17-mark">M</span><div><b>Paiement sécurisé par Moneroo</b><small>Une seule passerelle pour tes moyens de paiement</small></div><span class="sf-moneroo17-lock">🔒</span></div><div class="sf-pay17-options"><button class="sf-pay17-option active" data-method="mobile" onclick="selectPayMethod17(this)"><b>Mobile Money</b><small>MTN MoMo / Moov Money</small></button><button class="sf-pay17-option" data-method="card" onclick="selectPayMethod17(this)"><b>Carte bancaire</b><small>Visa / Mastercard</small></button></div><button class="sf-pay17-submit" onclick="confirmSubscription17()">Payer avec Moneroo →</button><p class="sf-pay17-note">Le paiement de ton abonnement SellFlow sera traité via Moneroo. Moneroo permet de proposer plusieurs méthodes de paiement locales avec une seule intégration.</p></div><div class="sf-pay17-success" id="sfPay17Success"><div class="check">✓</div><h3>Abonnement enregistré</h3><p id="sfPay17SuccessText">Ton offre a été sélectionnée.</p><button class="sf-pay17-submit" onclick="closePay17();go('subscription')">Retour à mon abonnement</button></div></div></div>
+<div class="sf-pay17" id="sfPay17" aria-hidden="true"><div class="sf-pay17-back" onclick="closePay17()"></div><div class="sf-pay17-sheet"><div class="sf-pay17-head"><div><h2>Activer ton abonnement</h2><p id="sfPay17Sub">Passage à l’offre Pro</p></div><button class="sf-pay17-close" onclick="closePay17()">×</button></div><div id="sfPay17Form"><div class="sf-pay17-summary"><div><span>Offre</span><b id="sfPay17Plan">Pro</b></div><div><span>Facturation</span><b id="sfPay17Cycle">Mensuelle</b></div><div><span>Total</span><b id="sfPay17Total">5 500 FCFA</b></div></div><div class="sf-moneroo17-brand"><span class="sf-moneroo17-mark">M</span><div><b>Paiement sécurisé par Moneroo</b><small>Une seule passerelle pour tes moyens de paiement</small></div><span class="sf-moneroo17-lock">🔒</span></div><div class="sf-pay17-options"><button class="sf-pay17-option active" data-method="mobile" onclick="selectPayMethod17(this)"><b>Mobile Money</b><small>MTN MoMo / Moov Money</small></button><button class="sf-pay17-option" data-method="card" onclick="selectPayMethod17(this)"><b>Carte bancaire</b><small>Visa / Mastercard</small></button></div><button class="sf-pay17-submit" onclick="confirmSubscription17()">Payer avec Moneroo →</button><p class="sf-pay17-note">Le paiement de ton abonnement SellFlow sera traité via Moneroo. Moneroo permet de proposer plusieurs méthodes de paiement locales avec une seule intégration.</p></div><div class="sf-pay17-success" id="sfPay17Success"><div class="check">✓</div><h3>Abonnement enregistré</h3><p id="sfPay17SuccessText">Ton offre a été sélectionnée.</p><button class="sf-pay17-submit" onclick="closePay17();go('subscription')">Retour à mon abonnement</button></div></div></div>
 <script>
 (function(){function prof(){var w=innerWidth;return w<600?'Téléphone':w<1024?'Tablette':'PC'}function run(){var ls=function(){try{localStorage.setItem('__sf19','1');localStorage.removeItem('__sf19');return true}catch(e){return false}}();
 var tests=[
@@ -4835,14 +4912,18 @@ body{background:#050607!important}
     try{window.sfGreet&&window.sfGreet()}catch(e){}
   }
   function applyKPIs(){
-    const paidOnly=state.sales.filter(s=>{const st=String((s&&(s.status||s.state||s.payment_status||s.paymentStatus))||'').toLowerCase();if(!st)return true;if(/fail|cancel|refus|declin|expir|pending|wait|process|unpaid|abandon|refund/.test(st))return false;return /paid|success|succeed|complet|confirm|valid|deliver/.test(st)}); const revenue=paidOnly.reduce((a,s)=>a+saleAmount(s),0), orders=state.sales.length, customers=state.customers.length, products=state.products.length;
-    const avg=orders?revenue/orders:0;
+    const paidOnly=state.sales.filter(s=>{const st=String((s&&(s.status||s.state||s.payment_status||s.paymentStatus))||'').toLowerCase();if(!st)return false;if(/fail|cancel|refus|declin|expir|pending|wait|process|unpaid|abandon|refund/.test(st))return false;return /paid|settl|success|succeed|complet|confirm|valid|deliver|captur|approv/.test(st)});
+    const failedOnly=state.sales.filter(s=>{const st=String((s&&(s.status||s.state||s.payment_status||s.paymentStatus))||'').toLowerCase();return /fail|cancel|refus|declin|expir|unpaid|abandon|refund/.test(st)});
+    const revenue=paidOnly.reduce((a,s)=>a+saleAmount(s),0), orders=state.sales.length, paidCount=paidOnly.length, customers=state.customers.length, products=state.products.length;
+    const avg=paidCount?revenue/paidCount:0;
+    const conversion = orders ? Math.round((paidCount/orders)*100)+'%' : 'N/D';
+    const relances = failedOnly.length;
     const k=document.querySelectorAll('#page-dashboard .kpi-value');
     if(k[0])k[0].textContent=money(revenue);
-    if(k[1])k[1].textContent='0';
-    if(k[2])k[2].textContent='N/D';
-    if(k[3])k[3].textContent='0';
-    const a=$('n15Revenue'),b=$('n15Orders'),c=$('n15Aov');if(a)a.textContent=money(revenue);if(b)b.textContent=fmt(orders);if(c)c.textContent=money(avg);
+    if(k[1])k[1].textContent=String(customers);
+    if(k[2])k[2].textContent=conversion;
+    if(k[3])k[3].textContent=String(relances);
+    const a=$('n15Revenue'),b=$('n15Orders'),c=$('n15Aov');if(a)a.textContent=money(revenue);if(b)b.textContent=fmt(paidCount);if(c)c.textContent=money(avg);
     setText('sfLiveProducts',fmt(products));setText('sfLiveSales',fmt(orders));setText('sfLiveCustomers',fmt(customers));
     const status=$('sfLiveStatus');if(status){status.textContent='LIVE';status.className='status s-good'}
     setText('sfLiveSource','Données réelles récupérées depuis Chariow');
@@ -4851,12 +4932,39 @@ body{background:#050607!important}
   function renderProducts(){
     const grid=document.querySelector('#page-products .grid.products');if(!grid)return;
     if(!state.products.length){grid.innerHTML='<div class="card sf-live-section"><b>Aucun produit renvoyé par Chariow.</b><p class="sf-live-muted">Le catalogue réel est vide ou inaccessible avec cette clé.</p></div>';return}
-    grid.innerHTML=state.products.slice(0,60).map((p,i)=>{const price=pick(p,['price.formatted','price.value','price','amount']);const status=pick(p,['status','state'])||'ACTIF';return '<div class="card product sf-live-section"><div class="product-cover">'+(['◈','✦','▣','◉'][i%4])+'</div><h4>'+escapeHTML(productName(p))+'</h4><p>Produit Chariow · ID '+escapeHTML(String(pick(p,['id','uuid'])||'—'))+'</p><div class="product-foot"><span class="price">'+escapeHTML(price==null?'—':(typeof price==='object'?JSON.stringify(price):String(price)))+'</span><span class="tag">'+escapeHTML(String(status).toUpperCase())+'</span></div></div>'}).join('');
+    grid.innerHTML=state.products.slice(0,60).map((p,i)=>{
+      const price=pick(p,['price.formatted','price.value','price','amount']);
+      const status=pick(p,['status','state'])||'ACTIF';
+      const img=pick(p,['image','image_url','thumbnail','thumbnail_url','cover','cover_url','photo','media.url','images.0.url','images.0']);
+      const imgUrl = img ? String(img) : '';
+      const cover = imgUrl
+        ? '<div class="product-cover" style="background:url(\''+escapeAttr(imgUrl)+'\') center/cover no-repeat;font-size:0"></div>'
+        : '<div class="product-cover">'+(['◈','✦','▣','◉'][i%4])+'</div>';
+      return '<div class="card product sf-live-section">'+cover+'<h4>'+escapeHTML(productName(p))+'</h4><p>Produit Chariow · ID '+escapeHTML(String(pick(p,['id','uuid'])||'—'))+'</p><div class="product-foot"><span class="price">'+escapeHTML(price==null?'—':(typeof price==='object'?JSON.stringify(price):String(price)))+'</span><span class="tag">'+escapeHTML(String(status).toUpperCase())+'</span></div></div>';
+    }).join('');
   }
   function renderOrders(){
     const tb=document.querySelector('#page-orders tbody');if(!tb)return;
-    if(!state.sales.length){tb.innerHTML='<tr><td colspan="5">Aucune vente retournée par Chariow.</td></tr>';return}
-    tb.innerHTML=state.sales.slice(0,100).map(s=>{const c=s.customer||s.client||{};const p=s.product||{};const n=customerName(c)||pick(s,['customer_name','buyer_name'])||'Client';const pn=productName(p)||pick(s,['product_name'])||'Produit';const st=saleStatus(s)||'paid';const cls=/fail|cancel|refund/.test(st)?'s-bad':/pending|wait/.test(st)?'s-warn':'s-good';return '<tr><td><div class="person"><div class="mini">'+escapeHTML(initials(n))+'</div><b>'+escapeHTML(n)+'</b></div></td><td>'+escapeHTML(pn)+'</td><td>'+escapeHTML(money(saleAmount(s)))+'</td><td><span class="status '+cls+'">'+escapeHTML(st.toUpperCase())+'</span></td><td>'+escapeHTML(saleDate(s)?new Date(saleDate(s)).toLocaleString('fr-FR'):'—')+'</td></tr>'}).join('');
+    if(!state.sales.length){tb.innerHTML='<tr><td colspan="6">Aucune vente retournée par Chariow.</td></tr>';return}
+    // ensure header has Action column
+    const thead=document.querySelector('#page-orders thead tr');
+    if(thead && !thead.innerHTML.includes('Action')){
+      thead.innerHTML='<th>Client</th><th>Produit</th><th>Montant</th><th>Statut</th><th>Date</th><th>Action</th>';
+    }
+    tb.innerHTML=state.sales.slice(0,100).map(s=>{
+      const c=s.customer||s.client||{};
+      const p=s.product||{};
+      const n=customerName(c)||pick(s,['customer_name','buyer_name'])||'Client';
+      const pn=productName(p)||pick(s,['product_name'])||'Produit';
+      const st=saleStatus(s)||'paid';
+      const cls=/fail|cancel|refund|refus|declin/.test(st)?'s-bad':/pending|wait|unpaid/.test(st)?'s-warn':'s-good';
+      const failed=/fail|cancel|refund|refus|declin|unpaid/.test(st);
+      const ph=String(pick(s,['customer.phone','client.phone','phone','customer_phone'])||pick(c,['phone','telephone','mobile'])||'');
+      const action=failed
+        ? '<button type="button" class="btn primary" style="padding:5px 9px;font-size:9px" onclick="window.sfRelanceClient&&window.sfRelanceClient({name:\''+escapeAttr(n)+'\',phone:\''+escapeAttr(ph)+'\',amount:\''+escapeAttr(money(saleAmount(s)))+'\'})">⚡ Relancer</button>'
+        : '—';
+      return '<tr><td><div class="person"><div class="mini">'+escapeHTML(initials(n))+'</div><b>'+escapeHTML(n)+'</b></div></td><td>'+escapeHTML(pn)+'</td><td>'+escapeHTML(money(saleAmount(s)))+'</td><td><span class="status '+cls+'">'+escapeHTML(st.toUpperCase())+'</span></td><td>'+escapeHTML(saleDate(s)?new Date(saleDate(s)).toLocaleString('fr-FR'):'—')+'</td><td>'+action+'</td></tr>';
+    }).join('');
   }
   function renderCustomersIntoCRM(){
     const list=$('verticalCRM');if(!list||!state.customers.length)return;
@@ -5583,9 +5691,9 @@ window.addEventListener('hashchange',function(){setTimeout(function(){personaliz
    const chart=$('n15Chart');if(chart){if(!ss.length)chart.innerHTML='<div class="sf-v13-empty">Aucune vente réelle sur cette période.</div>';else{const vals=Array.from({length:Math.min(range,14)},(_,i)=>0);ss.forEach(s=>{const d=new Date(saleDate(s));const idx=Math.min(vals.length-1,Math.max(0,Math.floor((Date.now()-d.getTime())/86400000)));vals[vals.length-1-idx]+=saleAmount(s)});const max=Math.max(...vals,1);chart.innerHTML=vals.map((v,i)=>`<div class="n15-bar-wrap"><span class="n15-bar-value">${Math.round(v/1000)}k</span><div class="n15-bar" style="height:${Math.max(8,v/max*165)}px"></div><span class="n15-bar-label">J-${vals.length-1-i}</span></div>`).join('')}}
  }
  function renderDashboard(){
-   if(!live())return;const c=state(),sales=c.sales||[],customers=c.customers||[],prospects=customers.filter(x=>/lead|prospect/i.test(statusOf(x))).length,paidSales=sales.filter(x=>{const st=statusOf(x);return !st||/^(paid|success|successful|succeeded|completed|confirmed|valid)$/.test(st)}).filter(x=>!/pending|failed|fail|cancel|refund|unpaid|wait|refused|declined/.test(statusOf(x))),rev=paidSales.reduce((a,s)=>a+saleAmount(s),0),pending=sales.filter(x=>/pending|failed|fail|cancel|refund|unpaid|wait/i.test(statusOf(x))).length, relances=Number(c.automationsExecuted||0);
-   const k=document.querySelectorAll('#page-dashboard .kpi-value');if(k[0])k[0].textContent=money(rev);if(k[1])k[1].textContent=String(prospects);if(k[2])k[2].textContent='N/D';if(k[3])k[3].textContent=String(relances);
-   const nav=document.querySelector('#page-dashboard .action-list');if(nav)nav.innerHTML=`<div class="action-card"><span class="action-icon">🔥</span><span class="action-copy"><b>Prospects actifs</b><small>Statuts lead/prospect réellement retournés par Chariow.</small></span><span class="action-next">${prospects}</span></div><div class="action-card"><span class="action-icon">⚠️</span><span class="action-copy"><b>Ventes à vérifier</b><small>Statuts pending/failed/cancel/refund détectés.</small></span><span class="action-next">${pending}</span></div><div class="action-card"><span class="action-icon">⚙️</span><span class="action-copy"><b>Relances automatiques exécutées</b><small>Uniquement les exécutions réellement enregistrées.</small></span><span class="action-next">${relances}</span></div>`;
+   if(!live())return;const c=state(),sales=c.sales||[],customers=c.customers||[],prospects=customers.filter(x=>/lead|prospect/i.test(statusOf(x))).length,paidSales=sales.filter(x=>{const st=statusOf(x);return !st||/^(paid|success|successful|succeeded|completed|confirmed|valid)$/.test(st)}).filter(x=>!/pending|failed|fail|cancel|refund|unpaid|wait|refused|declined/.test(statusOf(x))),rev=paidSales.reduce((a,s)=>a+saleAmount(s),0),pending=sales.filter(x=>/pending|failed|fail|cancel|refund|unpaid|wait/i.test(statusOf(x))).length, failed=sales.filter(x=>/failed|fail|cancel|refund|unpaid|refused|declined/i.test(statusOf(x))).length, conversion=sales.length?Math.round((paidSales.length/sales.length)*100)+'%':'N/D', relances=failed;
+   const k=document.querySelectorAll('#page-dashboard .kpi-value');if(k[0])k[0].textContent=money(rev);if(k[1])k[1].textContent=String(prospects||customers.length);if(k[2])k[2].textContent=conversion;if(k[3])k[3].textContent=String(relances);
+   const nav=document.querySelector('#page-dashboard .action-list');if(nav)nav.innerHTML=`<div class="action-card" data-goto="crm" style="cursor:pointer"><span class="action-icon">🔥</span><span class="action-copy"><b>Prospects actifs</b><small>Statuts lead/prospect réellement retournés par Chariow.</small></span><span class="action-next">${prospects||customers.length}</span></div><div class="action-card" data-goto="orders" style="cursor:pointer"><span class="action-icon">⚠️</span><span class="action-copy"><b>Ventes à vérifier</b><small>Statuts pending/failed/cancel/refund détectés.</small></span><span class="action-next">${pending}</span></div><div class="action-card" data-goto="orders" style="cursor:pointer"><span class="action-icon">⚙️</span><span class="action-copy"><b>Paiements échoués à relancer</b><small>Nombre de ventes en échec à traiter.</small></span><span class="action-next">${relances}</span></div>`;
    renderAnalyticsReal();
  }
  function renderStoreLink(){
@@ -5807,7 +5915,7 @@ window.addEventListener('hashchange',function(){setTimeout(function(){personaliz
 <label>Nom complet<input id="sfFName" autocomplete="name"></label><label>Pays<select id="sfFCountry"><option value="BJ" data-dial="+229">Bénin (+229)</option><option value="CI" data-dial="+225">Côte d’Ivoire (+225)</option><option value="CM" data-dial="+237">Cameroun (+237)</option><option value="SN" data-dial="+221">Sénégal (+221)</option><option value="TG" data-dial="+228">Togo (+228)</option><option value="FR" data-dial="+33">France (+33)</option></select></label><label>Téléphone<input id="sfFPhone" inputmode="tel" placeholder="Ex. 97000000"></label><label>E-mail<input id="sfFEmail" type="email" autocomplete="email"></label></div><div class="sf-final-actions"><button class="sf-final-btn sf-final-primary" type="button" onclick="sfFinalRequestCode()">Continuer →</button></div></section>
 <section class="sf-final-step" data-step="verify"><h2 class="sf-final-title">Vérifiez votre e-mail</h2><p class="sf-final-sub">Entrez le code reçu par e-mail.</p><div class="sf-final-form"><label>Code de vérification<input id="sfFCode" inputmode="numeric" maxlength="8" autocomplete="one-time-code"></label></div><div class="sf-final-actions"><button class="sf-final-btn sf-final-secondary" type="button" onclick="sfFinalStep('identity')">Retour</button><button class="sf-final-btn sf-final-primary" type="button" onclick="sfFinalVerifyCode()">Vérifier →</button></div></section>
 <section class="sf-final-step" data-step="password"><h2 class="sf-final-title">Sécurisez votre compte</h2><p class="sf-final-sub">Choisissez votre mot de passe.</p><div class="sf-final-form"><label>Mot de passe<input id="sfFPass" type="password" autocomplete="new-password" minlength="8"></label><label>Confirmer le mot de passe<input id="sfFPass2" type="password" autocomplete="new-password" minlength="8"></label></div><div class="sf-final-actions"><button class="sf-final-btn sf-final-secondary" type="button" onclick="sfFinalStep('verify')">Retour</button><button class="sf-final-btn sf-final-primary" type="button" onclick="sfFinalContinuePlan()">Continuer →</button></div></section>
-<section class="sf-final-step" data-step="plan"><h2 class="sf-final-title">Choisissez votre plan</h2><p class="sf-final-sub">Sélectionnez l'offre qui correspond à votre activité.</p><div class="sf-final-grid"><div class="sf-plan" data-plan="starter" onclick="sfFinalPlan(this)"><h3>Starter</h3><div class="sf-price">3 500 FCFA<span>/mois</span></div><p>Pour démarrer et organiser vos premières ventes.</p></div><div class="sf-plan" data-plan="pro" onclick="sfFinalPlan(this)"><h3>Pro</h3><div class="sf-price">9 900 FCFA<span>/mois</span></div><p>Pour développer votre activité et vos suivis.</p></div><div class="sf-plan" data-plan="business" onclick="sfFinalPlan(this)"><h3>Business</h3><div class="sf-price">29 900 FCFA<span>/mois</span></div><p>Pour une activité commerciale plus avancée.</p></div></div><div class="sf-final-actions"><button class="sf-final-btn sf-final-primary" type="button" onclick="sfFinalToPayment()">Continuer vers le paiement →</button></div></section>
+<section class="sf-final-step" data-step="plan"><h2 class="sf-final-title">Choisissez votre plan</h2><p class="sf-final-sub">Sélectionnez l'offre qui correspond à votre activité.</p><div class="sf-final-grid"><div class="sf-plan" data-plan="pro" onclick="sfFinalPlan(this)"><h3>Pro</h3><div class="sf-price">5 500 FCFA<span>/mois</span></div><p>Pour développer votre activité et vos suivis.</p></div><div class="sf-plan" data-plan="business" onclick="sfFinalPlan(this)"><h3>Business</h3><div class="sf-price">10 500 FCFA<span>/mois</span></div><p>Pour une activité commerciale plus avancée.</p></div></div><div class="sf-final-actions"><button class="sf-final-btn sf-final-primary" type="button" onclick="sfFinalToPayment()">Continuer vers le paiement →</button></div></section>
 <section class="sf-final-step" data-step="payment"><h2 class="sf-final-title">Paiement</h2><p class="sf-final-sub" id="sfFPaySummary">Votre plan sélectionné</p><div class="sf-final-form"><label>Nom<input id="sfFPayName" readonly></label><label>E-mail<input id="sfFPayEmail" readonly></label><label>Moyen de paiement<select id="sfFMethod"><option>Carte bancaire</option><option>Mobile Money</option></select></label></div><div class="sf-ob-promo" id="sfFinalPromoBox"><div class="sf-ob-promo-head"><label for="sfFinalPromoCode">Code promo</label><span>Accès spécial</span></div><div class="sf-ob-promo-row"><input id="sfFinalPromoCode" type="text" placeholder="Entre ton code promo" autocomplete="off" autocapitalize="characters"><button type="button" class="sf-ob-promo-btn" id="sfFinalPromoBtn" onclick="sfFinalApplyPromo()">Appliquer</button></div><small id="sfFinalPromoMsg" class="sf-ob-promo-msg"></small></div><div class="sf-final-actions"><button class="sf-final-btn sf-final-secondary" type="button" onclick="sfFinalStep('plan')">Retour</button><button class="sf-final-btn sf-final-primary" type="button" onclick="sfFinalPay(event)">Payer et continuer →</button></div></section>
 <section class="sf-final-step" data-step="done"><div class="sf-final-msg"><strong>Compte créé avec succès ! 🎉</strong><span id="sfFDoneText">Votre compte est prêt.</span><div class="sf-final-actions"><button class="sf-final-btn sf-final-primary" type="button" onclick="sfFinalConnectChariow()">Connecter avec Chariow →</button></div></div></section>
 </div></div>
@@ -5821,7 +5929,7 @@ window.sfFinalRequestCode=async function(){let name=$('sfFName').value.trim(),em
 window.sfFinalVerifyCode=async function(){let code=$('sfFCode').value.trim();if(!code)return alert('Entrez le code reçu.');try{let r=await fetch((window.SF_API||'https://sellflow-backend.onrender.com')+'/auth/register/verify-email-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:pending.email,code})});if(!r.ok)throw 0;verified=true;sfFinalStep('password')}catch(e){alert('Code incorrect ou expiré.')}}
 window.sfFinalContinuePlan=function(){if(!verified)return alert("Vérifiez d'abord votre e-mail.");let p=$('sfFPass').value,p2=$('sfFPass2').value;if(p.length<8)return alert('Le mot de passe doit contenir au moins 8 caractères.');if(p!==p2)return alert('Les mots de passe ne correspondent pas.');pending.password=p;sfFinalStep('plan')}
 window.sfFinalPlan=function(el){document.querySelectorAll('#sfFinalOnboard .sf-plan').forEach(x=>x.classList.remove('selected'));el.classList.add('selected');plan=el.dataset.plan}
-window.sfFinalToPayment=function(){if(!plan)return alert('Sélectionnez un plan.');$('sfFPayName').value=pending.name;$('sfFPayEmail').value=pending.email;let labels={starter:'Starter · 3 500 FCFA/mois',pro:'Pro · 9 900 FCFA/mois',business:'Business · 29 900 FCFA/mois'};$('sfFPaySummary').textContent='Plan sélectionné : '+labels[plan];sfFinalStep('payment')}
+window.sfFinalToPayment=function(){if(!plan)return alert('Sélectionnez un plan.');$('sfFPayName').value=pending.name;$('sfFPayEmail').value=pending.email;let labels={pro:'Pro · 5 500 FCFA/mois',business:'Business · 10 500 FCFA/mois'};$('sfFPaySummary').textContent='Plan sélectionné : '+labels[plan];sfFinalStep('payment')}
 window.sfFinalPay=async function(){let btn=event&&event.currentTarget;if(btn){btn.disabled=true;btn.textContent='Traitement…'}try{let api=window.SF_API||'https://sellflow-backend.onrender.com';let r=await fetch(api+'/auth/register/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...pending,plan,paymentMethod:$('sfFMethod').value})});if(!r.ok)throw 0;let d=await r.json().catch(()=>({}));if(d.token)localStorage.setItem('sellflow_token',d.token);if(d.user)localStorage.setItem('sellflow_user',JSON.stringify(d.user));localStorage.setItem('sellflow_selected_plan',plan);sfFinalStep('done')}catch(e){alert("Le paiement est simulé, mais la création finale doit être confirmée par le backend. Aucun faux succès n'est affiché.")}finally{if(btn){btn.disabled=false;btn.textContent='Payer et continuer →'}}}
 window.sfFinalConnectChariow=function(){sfFinalClose();if(typeof openUniversalIntegrationConfig==='function'){openUniversalIntegrationConfig('Chariow','Commerce digital · Boutique principale','chariow')}else if(typeof go==='function')go('chariow')}
 })();
@@ -6259,7 +6367,7 @@ document.addEventListener('click',function(e){let t=e.target.closest('[onclick*=
     if(!finalPlan){alert('Sélectionnez un plan.');return;}
     if($('sfFPayName')) $('sfFPayName').value=finalPending.name || '';
     if($('sfFPayEmail')) $('sfFPayEmail').value=finalPending.email || '';
-    const labels={starter:'Starter · 3 500 FCFA/mois',pro:'Pro · 9 900 FCFA/mois',business:'Business · 29 900 FCFA/mois'};
+    const labels={pro:'Pro · 5 500 FCFA/mois',business:'Business · 10 500 FCFA/mois'};
     if($('sfFPaySummary')) $('sfFPaySummary').textContent='Plan sélectionné : '+(labels[finalPlan] || finalPlan);
     window.sfFinalStep('payment');
   };
@@ -7063,7 +7171,7 @@ document.addEventListener('click',function(e){let t=e.target.closest('[onclick*=
   const API='https://sellflow-backend.onrender.com';
   const TOKEN_KEY='sellflow_token';
   const names={starter:'Starter',pro:'Pro',business:'Business',free:'Free'};
-  const prices={starter:{monthly:3500,yearly:35000},pro:{monthly:9900,yearly:99000},business:{monthly:29900,yearly:299000}};
+  const prices={pro:{monthly:5500,yearly:55000},business:{monthly:10500,yearly:105000}};
   function token(){try{return localStorage.getItem(TOKEN_KEY)||''}catch(e){return ''}}
   function fmt(n){return Number(n||0).toLocaleString('fr-FR')}
   function set(id,v){const e=document.getElementById(id);if(e)e.textContent=v}
@@ -7078,7 +7186,7 @@ document.addEventListener('click',function(e){let t=e.target.closest('[onclick*=
     set('sfStarterUnit',billing==='yearly'?'FCFA / an':'FCFA / mois');
     set('sfProUnit',billing==='yearly'?'FCFA / an':'FCFA / mois');
     set('sfBizUnit',billing==='yearly'?'FCFA / an':'FCFA / mois');
-    set('sfStarterPrice',fmt(prices.starter[billing]));
+    /* starter removed */
     set('sfProPrice',fmt(prices.pro[billing]));
     set('sfBizPrice',fmt(prices.business[billing]));
     document.querySelectorAll('.sf-sub17-plan').forEach(function(card){
@@ -7115,7 +7223,7 @@ document.addEventListener('click',function(e){let t=e.target.closest('[onclick*=
   window.manageSubscription17=function(){
     const sub=window.sfServerSubscription;
     if(!sub||sub.status!=='active'||!names[sub.plan]){
-      if(typeof toast==='function')toast('Aucun abonnement actif. Choisis Starter, Pro ou Business.');
+      if(typeof toast==='function')toast('Aucun abonnement actif. Choisis Pro ou Business.');
       return;
     }
     if(typeof choosePlan17==='function')choosePlan17(sub.plan);
@@ -7133,7 +7241,7 @@ document.addEventListener('click',function(e){let t=e.target.closest('[onclick*=
   const TOKEN_KEY='sellflow_token';
   const LEGACY_KEYS=['sellflow_subscription_v17','sellflow_selected_plan','sellflow_promo_code'];
   const NAMES={free:'Free',starter:'Starter',pro:'Pro',business:'Business'};
-  const PRICES={starter:{monthly:3500,yearly:35000},pro:{monthly:9900,yearly:99000},business:{monthly:29900,yearly:299000}};
+  const PRICES={pro:{monthly:5500,yearly:55000},business:{monthly:10500,yearly:105000}};
   let billing='monthly';
   function token(){try{return localStorage.getItem(TOKEN_KEY)||''}catch(e){return ''}}
   function fmt(v){return Number(v||0).toLocaleString('fr-FR')}
@@ -7160,7 +7268,7 @@ document.addEventListener('click',function(e){let t=e.target.closest('[onclick*=
     text('sfStarterUnit',billing==='yearly'?'FCFA / an':'FCFA / mois');
     text('sfProUnit',billing==='yearly'?'FCFA / an':'FCFA / mois');
     text('sfBizUnit',billing==='yearly'?'FCFA / an':'FCFA / mois');
-    text('sfStarterPrice',fmt(PRICES.starter[billing]));
+    /* starter removed */
     text('sfProPrice',fmt(PRICES.pro[billing]));
     text('sfBizPrice',fmt(PRICES.business[billing]));
     document.querySelectorAll('.sf-sub17-plan').forEach(function(card){
@@ -7212,7 +7320,7 @@ document.addEventListener('click',function(e){let t=e.target.closest('[onclick*=
   window.manageSubscription17=function(){
     const sub=window.sfServerSubscription;
     if(!sub||sub.status!=='active'){
-      if(typeof toast==='function')toast('Aucun abonnement actif. Choisis Starter, Pro ou Business.');
+      if(typeof toast==='function')toast('Aucun abonnement actif. Choisis Pro ou Business.');
       return false;
     }
     if(typeof choosePlan17==='function')choosePlan17(String(sub.plan).toLowerCase());
@@ -7230,8 +7338,8 @@ document.addEventListener('click',function(e){let t=e.target.closest('[onclick*=
 <script id="sf-v24-payment-fix">
 (function(){
   'use strict';
-  const PRICES={starter:{monthly:3500,yearly:35000},pro:{monthly:9900,yearly:99000},business:{monthly:29900,yearly:299000}};
-  const NAMES={starter:'Starter',pro:'Pro',business:'Business'};
+  const PRICES={pro:{monthly:5500,yearly:55000},business:{monthly:10500,yearly:105000}};
+  const NAMES={pro:'Pro',business:'Business'};
   function el(id){return document.getElementById(id)}
   function fmt(n){return Number(n||0).toLocaleString('fr-FR')}
   function getBilling(){return window.sfSubscriptionBilling==='yearly'?'yearly':'monthly'}
@@ -7286,20 +7394,40 @@ document.addEventListener('click',function(e){let t=e.target.closest('[onclick*=
   window.manageSubscription17=function(){
     const sub=window.sfServerSubscription;
     if(!sub || sub.status!=='active'){
-      if(typeof toast==='function')toast('Aucun abonnement actif. Choisis Starter, Pro ou Business.');
+      if(typeof toast==='function')toast('Aucun abonnement actif. Choisis Pro ou Business.');
       return false;
     }
     window.choosePlan17(String(sub.plan).toLowerCase());
     return true;
   };
-  // Never activate an abonnement locally: real payment must be confirmed by the backend.
-  window.confirmSubscription17=function(){
+  // Real Moneroo payment via backend /payments/create
+  window.confirmSubscription17=async function(){
     const plan=window.sfPay17SelectedPlan||el('sfPay17')?.dataset.plan;
     const billing=window.sfPay17SelectedBilling||el('sfPay17')?.dataset.billing||getBilling();
-    const total=plan&&PRICES[plan]?PRICES[plan][billing]:0;
-    if(typeof toast==='function')toast('Le paiement sécurisé Moneroo doit être connecté avant l’activation de l’abonnement.');
-    else alert('Le paiement sécurisé Moneroo doit être connecté avant l’activation de l’abonnement.');
-    console.log('SellFlow paiement en attente:',{plan,billing,total,promo:window.sfPay17PromoCode||''});
+    if(!plan||!PRICES[plan]){ if(typeof toast==='function')toast('Choisis un plan Pro ou Business.'); return false; }
+    const offerId = plan + '_' + (billing==='yearly'||billing==='annual'?'annual':'monthly');
+    const token = (function(){try{return localStorage.getItem('sellflow_token')||sessionStorage.getItem('sellflow_token')||'';}catch(e){return ''}})();
+    if(!token){ if(typeof toast==='function')toast('Connecte-toi pour payer.'); return false; }
+    const btn = document.querySelector('.sf-pay17-submit');
+    if(btn){ btn.disabled=true; btn.textContent='Initialisation Moneroo…'; }
+    try{
+      const API = (window.SF_API||window.API||'https://sellflow-api.onrender.com');
+      const r = await fetch(String(API).replace(/\/+$/,'')+'/payments/create',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,Accept:'application/json'},
+        body:JSON.stringify({offer_id:offerId})
+      });
+      const d = await r.json().catch(function(){return {}});
+      if(!r.ok) throw new Error(d.message||d.error||('Erreur '+r.status));
+      const url = d.payment && d.payment.checkout_url;
+      if(!url) throw new Error('URL de paiement manquante');
+      try{ sessionStorage.setItem('sellflow_paying','1'); localStorage.setItem('sellflow_flow_step','verify'); }catch(e){}
+      if(typeof toast==='function')toast('Redirection vers Moneroo…');
+      location.href = url;
+    }catch(e){
+      if(typeof toast==='function')toast('✕ '+(e.message||'Paiement impossible'));
+      if(btn){ btn.disabled=false; btn.textContent='Payer avec Moneroo →'; }
+    }
     return false;
   };
   window.__sfEnsurePromo=ensurePromoBox;
@@ -7309,8 +7437,8 @@ document.addEventListener('click',function(e){let t=e.target.closest('[onclick*=
 <script id="sf-v25-annual-final-fix">
 (function(){
   'use strict';
-  const PRICES={starter:{monthly:3500,yearly:35000},pro:{monthly:9900,yearly:99000},business:{monthly:29900,yearly:299000}};
-  const NAMES={starter:'Starter',pro:'Pro',business:'Business'};
+  const PRICES={pro:{monthly:5500,yearly:55000},business:{monthly:10500,yearly:105000}};
+  const NAMES={pro:'Pro',business:'Business'};
   const fmt=n=>Number(n||0).toLocaleString('fr-FR');
   const el=id=>document.getElementById(id);
   function currentBilling(){return window.sfSubscriptionBilling==='yearly'?'yearly':'monthly'}
@@ -7319,8 +7447,8 @@ document.addEventListener('click',function(e){let t=e.target.closest('[onclick*=
     ['sfSub17Monthly','sfBillingMonthlyV25'].forEach(id=>{const x=el(id);if(x)x.classList.toggle('active',b==='monthly')});
     ['sfSub17Yearly','sfBillingYearlyV25'].forEach(id=>{const x=el(id);if(x)x.classList.toggle('active',b==='yearly')});
     const units=b==='yearly'?'FCFA / an':'FCFA / mois';
-    ['sfStarterUnit','sfProUnit','sfBizUnit'].forEach(id=>{if(el(id))el(id).textContent=units});
-    if(el('sfStarterPrice'))el('sfStarterPrice').textContent=fmt(PRICES.starter[b]);
+    ['sfProUnit','sfBizUnit'].forEach(id=>{if(el(id))el(id).textContent=units});
+    /* starter removed */
     if(el('sfProPrice'))el('sfProPrice').textContent=fmt(PRICES.pro[b]);
     if(el('sfBizPrice'))el('sfBizPrice').textContent=fmt(PRICES.business[b]);
   }
@@ -8276,7 +8404,7 @@ body.light-mode7 .sf-int-dialog span{color:#56606d!important;opacity:1!important
 
       if(typeof toast==='function'){
         toast(
-          'Aucun abonnement actif. Choisis Starter, Pro ou Business.'
+          'Aucun abonnement actif. Choisis Pro ou Business.'
         );
       }
 
@@ -9163,9 +9291,9 @@ html,body{background:#050605!important}
   function isFailed(st){ return /failed|fail|cancel|refused|declined|expired/.test(st||''); }
   function isPending(st){ return /pending|wait|processing|unpaid|abandoned|abandon/.test(st||''); }
   function isPaid(st){
-    if(!st) return true; // if Chariow returns no status, treat as recorded sale
+    if(!st) return false;
     if(isFailed(st) || isPending(st)) return false;
-    return /paid|success|successful|succeeded|completed|confirmed|valid|delivered/.test(st);
+    return /paid|settl|success|successful|succeeded|completed|confirmed|valid|delivered|captur|approv/.test(st);
   }
   function token(){
     try{ return localStorage.getItem('sellflow_token')||sessionStorage.getItem('sellflow_token')||''; }
@@ -9220,13 +9348,17 @@ html,body{background:#050605!important}
       det.innerHTML = '<div class="sf-live-muted">Synchronise ta boutique Chariow pour afficher les vrais rapports.</div>';
       return;
     }
-    var rows = failed.slice(0,20).map(function(s){
-      return '<tr><td>'+esc(nameOfSale(s))+'</td><td>'+esc(money(amountOf(s)))+'</td><td><span class="status s-bad">'+esc(statusOf(s)||'échec')+'</span></td></tr>';
+    var rows = failed.slice(0,30).map(function(s,idx){
+      var nm=nameOfSale(s);
+      var ph=String(pick(s,['customer.phone','client.phone','phone','customer_phone','buyer_phone'])||pick(s.customer||{},['phone','telephone','mobile'])||'');
+      var amt=money(amountOf(s));
+      return '<tr><td>'+esc(nm)+'</td><td>'+esc(amt)+'</td><td><span class="status s-bad">'+esc(statusOf(s)||'échec')+'</span></td>'+
+        '<td><button type="button" class="btn primary" style="padding:6px 10px;font-size:10px" onclick="window.sfRelanceClient&&window.sfRelanceClient({name:\''+esc(nm).replace(/'/g,'')+'\',phone:\''+esc(ph).replace(/'/g,'')+'\',amount:\''+esc(amt)+'\',saleIndex:'+idx+'})">⚡ Relancer</button></td></tr>';
     }).join('');
     det.innerHTML =
       '<div class="section-title"><h3>Paiements échoués / à relancer</h3><span>'+failed.length+' vente(s)</span></div>'+
       (failed.length
-        ? '<div class="table-wrap"><table class="table"><thead><tr><th>Client</th><th>Montant</th><th>Statut</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+        ? '<div class="table-wrap"><table class="table"><thead><tr><th>Client</th><th>Montant</th><th>Statut</th><th>Action</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
         : '<p class="sf-live-muted">Aucun paiement échoué dans les données synchronisées.</p>');
   };
 
@@ -9397,12 +9529,10 @@ html,body{background:#050605!important}
 
   /* ---------- D: After register → plan choice → Moneroo ---------- */
   var PLAN_OFFERS = {
-    starter_monthly: { plan:'starter', billing_cycle:'monthly', amount:3500, label:'Starter · Mensuel · 3 500 FCFA' },
-    pro_monthly: { plan:'pro', billing_cycle:'monthly', amount:9900, label:'Pro · Mensuel · 9 900 FCFA' },
-    business_monthly: { plan:'business', billing_cycle:'monthly', amount:29900, label:'Business · Mensuel · 29 900 FCFA' },
-    starter_annual: { plan:'starter', billing_cycle:'annual', amount:35000, label:'Starter · Annuel · 35 000 FCFA' },
-    pro_annual: { plan:'pro', billing_cycle:'annual', amount:99000, label:'Pro · Annuel · 99 000 FCFA' },
-    business_annual: { plan:'business', billing_cycle:'annual', amount:299000, label:'Business · Annuel · 299 000 FCFA' }
+    pro_monthly: { plan:'pro', billing_cycle:'monthly', amount:5500, label:'Pro · Mensuel · 5 500 FCFA' },
+    business_monthly: { plan:'business', billing_cycle:'monthly', amount:10500, label:'Business · Mensuel · 10 500 FCFA' },
+    pro_annual: { plan:'pro', billing_cycle:'annual', amount:55000, label:'Pro · Annuel · 55 000 FCFA' },
+    business_annual: { plan:'business', billing_cycle:'annual', amount:105000, label:'Business · Annuel · 105 000 FCFA' }
   };
 
   function ensurePlanModal(){
@@ -9457,9 +9587,8 @@ html,body{background:#050605!important}
       var root = $('sfPrPlans');
       if(!root) return;
       var list = [
-        { id:'starter', monthly:3500, annual:35000, desc:'1 boutique · CRM de base' },
-        { id:'pro', monthly:9900, annual:99000, desc:'3 boutiques · automatisations' },
-        { id:'business', monthly:29900, annual:299000, desc:'10 boutiques · support prioritaire' }
+        { id:'pro', monthly:5500, annual:55000, desc:'3 boutiques · automatisations' },
+        { id:'business', monthly:10500, annual:105000, desc:'10 boutiques · support prioritaire' }
       ];
       root.innerHTML = list.map(function(p){
         var price = billing==='annual' ? p.annual : p.monthly;
@@ -9768,9 +9897,16 @@ function mode(m){var b=document.body;b.classList.remove('sf-menu-open','sf-mode-
 function wanted(){return tok()?(LS.getItem('sellflow_flow_step')?'flow':'app'):'entry'}
 function closeAuth(){var a=$('sfAuth');if(a){a.classList.remove('open','sf-auth-force-open');a.style.display='none';a.setAttribute('aria-hidden','true')}}
 function paintDashboard(){
- var s=window.state||{};if(s.live)return;
+ var s=window.state||{};
+ if(s.live){
+   try{ if(typeof window.applyKPIs==='function') window.applyKPIs(); }catch(e){}
+   try{ if(typeof window.renderDashboard==='function') window.renderDashboard(); }catch(e){}
+   try{window.sfRenderActionsReal&&window.sfRenderActionsReal()}catch(e){}
+   try{window.sfRenderReportsReal&&window.sfRenderReportsReal()}catch(e){}
+   return;
+ }
  var k=document.querySelectorAll('#page-dashboard .kpi-value');
- if(k[0])k[0].textContent='0 FCFA';if(k[1])k[1].textContent='0';if(k[3])k[3].textContent='0';
+ if(k[0])k[0].textContent='0 FCFA';if(k[1])k[1].textContent='0';if(k[2])k[2].textContent='N/D';if(k[3])k[3].textContent='0';
  try{window.sfRenderActionsReal&&window.sfRenderActionsReal()}catch(e){}
 }
 function showDashboard(){
@@ -9852,7 +9988,7 @@ window.addEventListener('click',function(ev){
  if(el.matches('[onclick*="sfLogout"],.sf-account-danger,.im16-logout-btn')){ev.preventDefault();ev.stopImmediatePropagation();logout()}
 },true);
 /* ---------- parcours : plan → paiement → boutique Chariow ---------- */
-var PLANS=[{id:'starter',n:'Starter',m:3500,y:35000,d:'1 boutique · CRM de base'},{id:'pro',n:'Pro',m:9900,y:99000,d:'3 boutiques · automatisations · IA'},{id:'business',n:'Business',m:29900,y:299000,d:'10 boutiques · support prioritaire'}];
+var PLANS=[{id:'pro',n:'Pro',m:5500,y:55000,d:'3 boutiques · automatisations · IA'},{id:'business',n:'Business',m:10500,y:105000,d:'10 boutiques · support prioritaire'}];
 function fl(){try{return JSON.parse(LS.getItem('sellflow_flow')||'{}')}catch(e){return {}}}
 function setFl(o){var c=fl();for(var k in o)c[k]=o[k];LS.setItem('sellflow_flow',JSON.stringify(c))}
 function ensureFlow(){var d=$('sfFlow');if(!d){d=document.createElement('div');d.id='sfFlow';document.body.appendChild(d);d.addEventListener('click',onFlow)}return d}
@@ -9942,7 +10078,7 @@ function onFlow(e){
 }
 /* ---------- analytique : données réelles uniquement ---------- */
 function amt(x){var v=x&&(x.total!=null?x.total:x.amount!=null?x.amount:x.total_amount!=null?x.total_amount:x.price);if(v&&typeof v==='object')v=v.value!=null?v.value:v.amount;var n=Number(String(v==null?0:v).replace(/[^0-9.\-]/g,''));return isFinite(n)?n:0}
-function isPaid(x){var s=String((x&&(x.status||x.state||x.payment_status||x.paymentStatus))||'').toLowerCase();if(!s)return true;if(/fail|cancel|refus|declin|expir|pending|wait|process|unpaid|abandon|refund/.test(s))return false;return /paid|success|succeed|complet|confirm|valid|deliver/.test(s)}
+function isPaid(x){return window.SFD?window.SFD.isPaid(x):false}
 function dt(x){var v=x&&(x.paid_at||x.created_at||x.createdAt||x.date||x.completed_at);if(!v)return null;var d=new Date(typeof v==='number'&&v<1e12?v*1000:v);return isNaN(d)?null:d}
 function pname(x){var p=(x&&(x.product||x.item))||{};return p.name||p.title||(x&&(x.product_name||x.item_name))||'Produit Chariow'}
 function dl(c,p){if(!p)return {t:c?'Nouvelle activité':'Aucune donnée',u:1};var v=(c-p)/p*100;return {t:(v>=0?'+':'')+v.toFixed(1).replace('.',',')+'% vs période précédente',u:v>=0}}
@@ -9952,12 +10088,14 @@ function periodData(){
  var cur=paid.filter(function(p){return !p.d||(p.d>=from&&p.d<=now+864e5)}),prev=paid.filter(function(p){return p.d&&p.d>=pf&&p.d<from});
  return {live:live,days:days,from:from,span:span,cur:cur,prev:prev,orders:all.filter(function(x){var d=dt(x);return !d||(d>=from)}).length,customers:live?(s.customers||[]).length:0};
 }
+function convPeriod(D,paid){var S=window.state||{},from=Date.now()-(D.days||30)*86400000,tot=0;(S.sales||[]).forEach(function(x){var d=window.SFD&&window.SFD.date(x);if(d&&d.getTime()>=from)tot++});
+ return tot?{t:(Math.round(paid/tot*1000)/10).toString().replace('.',',')+' %',sub:paid+' validées sur '+tot+' commandes'}:{t:'N/D',sub:'Aucune commande sur la période'}}
 function renderAnalytics(){
  var pg=$('page-analytics');if(!pg)return;
  var D=periodData(),rev=D.cur.reduce(function(a,p){return a+p.a},0),n=D.cur.length,aov=n?rev/n:0,prev=D.prev.reduce(function(a,p){return a+p.a},0),pn=D.prev.length,paov=pn?prev/pn:0;
  var set=function(id,t){var e=$(id);if(e)e.textContent=t};
- set('n15Revenue',money(rev));set('n15Orders',String(n));set('n15Conversion','—');set('n15Aov',money(aov));set('n15ChartTotal',money(rev));
- var ds=[dl(rev,prev),dl(n,pn),{t:'Non mesuré (pas de données de visites)',u:1},dl(aov,paov)];
+ set('n15Revenue',money(rev));set('n15Orders',String(n));var cv=convPeriod(D,n);set('n15Conversion',cv.t);set('n15Aov',money(aov));set('n15ChartTotal',money(rev));
+ var ds=[dl(rev,prev),dl(n,pn),{t:cv.sub,u:1},dl(aov,paov)];
  pg.querySelectorAll('.n15-kpi .n15-delta').forEach(function(e,i){if(ds[i]){e.textContent=ds[i].t;e.className='n15-delta '+(ds[i].u?'n15-up':'n15-down')}});
  var note=$('sfAnNote');
  if(!D.live){if(!note){note=document.createElement('div');note.id='sfAnNote';note.className='sub';note.style.cssText='margin:0 0 12px;font-size:12px';var k=pg.querySelector('.n15-kpis');if(k)k.parentNode.insertBefore(note,k)}note.textContent='Aucune donnée pour le moment : connecte ta boutique Chariow pour voir tes statistiques réelles.'}else if(note)note.remove();
@@ -10035,6 +10173,557 @@ setTimeout(function(){guardOwner();renderAnalytics();if(wanted()==='app')paintDa
     deferred.prompt();deferred.userChoice.finally(function(){deferred=null;window.sfCanInstall=false});
   };
 })();
+</script>
+
+<script id="sf-fix-actions">
+(function(){
+  window.sfExportOrders = function(){
+    var sales = (window.state && window.state.sales) || [];
+    if(!sales.length){ if(typeof toast==="function") toast("Aucune commande a exporter"); return; }
+    function pick(o,paths){for(var i=0;i<paths.length;i++){var p=paths[i].split("."),x=o;for(var j=0;j<p.length;j++){x=x&&x[p[j]]}if(x!=null&&x!=="")return x}return ""}
+    function amt(s){var v=pick(s,["amount","total","price.value","price","payment.amount"]);var n=Number(String(v==null?0:v).replace(/[^0-9.\-]/g,""));return isFinite(n)?n:0}
+    function st(s){return String(pick(s,["status","state","payment_status"])||"").toLowerCase()}
+    function nm(s){var c=s.customer||s.client||{};return pick(c,["name","full_name","email"])||pick(s,["customer_name"])||"Client"}
+    function pn(s){var p=s.product||s.item||{};return pick(p,["name","title"])||pick(s,["product_name"])||"Produit"}
+    var rows=[["Client","Produit","Montant","Statut","Date"]].concat(sales.map(function(s){
+      return [nm(s),pn(s),amt(s),st(s),pick(s,["paid_at","created_at","date"])||""];
+    }));
+    var csv=rows.map(function(r){return r.map(function(v){return '"'+String(v==null?"":v).replace(/"/g,'""')+'"'}).join(";")}).join("\n");
+    var a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}));
+    a.download="sellflow-commandes-"+new Date().toISOString().slice(0,10)+".csv";
+    a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href)},1000);
+    if(typeof toast==="function") toast("Export CSV pret · "+sales.length+" commande(s)");
+  };
+
+  window.sfOpenNewProduct = function(){
+    var existing=document.getElementById("sfNewProductModal");
+    if(existing){existing.style.display="flex";return}
+    var m=document.createElement("div");
+    m.id="sfNewProductModal";
+    m.style.cssText="position:fixed;inset:0;z-index:300;display:flex;align-items:center;justify-content:center;background:#000a";
+    m.innerHTML='<div style="background:#0e1422;border:1px solid #2b3551;border-radius:18px;padding:22px;width:min(420px,92vw);color:#fff"><h3 style="margin:0 0 8px">Nouveau produit</h3><p style="font-size:11px;color:#8992aa;margin:0 0 14px">Les produits sont synchronises depuis Chariow. Cree ou modifie le produit dans ta boutique Chariow, puis resynchronise.</p><button class="btn primary" style="width:100%;margin-bottom:8px" id="sfNpSync">Resynchroniser le catalogue</button><button class="btn" style="width:100%" id="sfNpClose">Fermer</button></div>';
+    document.body.appendChild(m);
+    document.getElementById("sfNpClose").onclick=function(){m.remove()};
+    document.getElementById("sfNpSync").onclick=function(){
+      if(typeof window.sfSyncChariowLive==="function"){window.sfSyncChariowLive();if(typeof toast==="function")toast("Synchronisation lancee")}
+      else if(typeof toast==="function")toast("Synchronisation non disponible");
+      m.remove();
+    };
+  };
+})();
+</script>
+
+
+<script id="sf-goto-handler">
+document.addEventListener("click",function(e){
+  var t=e.target && e.target.closest && e.target.closest("[data-goto]");
+  if(!t) return;
+  var p=t.getAttribute("data-goto");
+  if(!p) return;
+  e.preventDefault();
+  if(typeof window.go==="function") window.go(p);
+  else if(typeof window.showPage==="function") window.showPage(p);
+  else {
+    var page=document.getElementById("page-"+p);
+    if(page){
+      document.querySelectorAll(".page").forEach(function(x){x.classList.remove("active")});
+      page.classList.add("active");
+    }
+  }
+}, true);
+</script>
+
+
+<script id="sf-relance-client">
+(function(){
+  function apiBase(){
+    try{
+      var a = window.SF_API || window.API || window.SF_BACKEND_URL || '';
+      if(a) return String(a).replace(/\/+$/,'');
+    }catch(e){}
+    return 'https://sellflow-backend.onrender.com';
+  }
+  function token(){
+    try{
+      return localStorage.getItem('sellflow_token')
+        || localStorage.getItem('sellflow_access_token')
+        || sessionStorage.getItem('sellflow_token')
+        || '';
+    }catch(e){ return ''; }
+  }
+
+  window.sfRelanceClient = async function(opts){
+    opts = opts || {};
+    var name = opts.name || 'Client';
+    var phone = String(opts.phone || '').replace(/[^\d+]/g,'');
+    var amount = opts.amount || '';
+    var msg = opts.message || (
+      'Bonjour ' + name + ', votre paiement' +
+      (amount ? ' de ' + amount : '') +
+      " n'a pas abouti. Je peux vous aider a finaliser votre commande en toute securite. Repondez a ce message pour reprendre."
+    );
+
+    try{
+      var log = JSON.parse(localStorage.getItem('sellflow_relance_log')||'[]');
+      log.unshift({name:name, phone:phone, at:Date.now(), amount:amount});
+      localStorage.setItem('sellflow_relance_log', JSON.stringify(log.slice(0,50)));
+    }catch(e){}
+
+    if(!phone || phone.replace(/\D/g,'').length < 8){
+      if(typeof toast==='function') toast('Numero manquant : impossible d\'envoyer via WhatsApp API');
+      if(typeof openAction==='function') openAction('payment', name);
+      return;
+    }
+
+    var t = token();
+    if(!t){
+      if(typeof toast==='function') toast('Session expiree. Reconnecte-toi.');
+      return;
+    }
+
+    if(typeof toast==='function') toast('Envoi de la relance par l\'agent IA…');
+
+    try{
+      var r = await fetch(apiBase()+'/whatsapp/relance', {
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'Authorization':'Bearer '+t,
+          'Accept':'application/json'
+        },
+        body: JSON.stringify({
+          name: name,
+          phone: phone,
+          amount: amount,
+          message: msg
+        })
+      });
+      var d = await r.json().catch(function(){return {}});
+      if(!r.ok){
+        var code = d.code || '';
+        if(code==='WHATSAPP_NOT_CONNECTED'){
+          if(typeof toast==='function') toast('WhatsApp non connecte · ouvre Integrations');
+          if(typeof openUniversalIntegrationConfig==='function'){
+            setTimeout(function(){
+              openUniversalIntegrationConfig('WhatsApp Business','Conversations, reponses et relances','whatsapp');
+            }, 400);
+          }
+          return;
+        }
+        throw new Error(d.message || d.error || ('Erreur ' + r.status));
+      }
+      if(typeof toast==='function') toast('✓ Relance envoyee par l\'agent IA a ' + name);
+    }catch(e){
+      if(typeof toast==='function') toast('✕ ' + (e.message || 'Envoi WhatsApp impossible'));
+    }
+  };
+
+  // Sauvegarde serveur quand on connecte WhatsApp depuis Integrations
+  var prevConnect = window.connectUniversalIntegration;
+  window.connectUniversalIntegration = async function(e){
+    if(e && e.preventDefault) e.preventDefault();
+    var slugEl = document.getElementById('sfIntSlug');
+    var slug = slugEl ? slugEl.value : '';
+    var key = ((document.getElementById('sfIntApiKey')||{}).value||'').trim();
+    var secret = ((document.getElementById('sfIntSecret')||{}).value||'').trim();
+    var endpoint = ((document.getElementById('sfIntEndpoint')||{}).value||'').trim();
+
+    if(slug === 'whatsapp'){
+      if(!key){
+        if(typeof toast==='function') toast('Colle le token d\'acces Meta WhatsApp');
+        return;
+      }
+      if(!secret){
+        if(typeof toast==='function') toast('Colle le Phone Number ID dans le champ Secret API');
+        return;
+      }
+      var t = token();
+      if(!t){
+        if(typeof toast==='function') toast('Connecte-toi avant de configurer WhatsApp');
+        return;
+      }
+      var btn = document.getElementById('sfIntConnectBtn');
+      if(btn){ btn.disabled = true; btn.textContent = 'Verification Meta…'; }
+      try{
+        var r = await fetch(apiBase()+'/whatsapp/connect', {
+          method:'POST',
+          headers:{
+            'Content-Type':'application/json',
+            'Authorization':'Bearer '+t,
+            'Accept':'application/json'
+          },
+          body: JSON.stringify({
+            access_token: key,
+            phone_number_id: secret,
+            api_version: 'v21.0'
+          })
+        });
+        var d = await r.json().catch(function(){return {}});
+        if(!r.ok) throw new Error(d.message || d.error || ('Erreur ' + r.status));
+
+        // garder aussi en local pour l'UI
+        try{
+          var raw = localStorage.getItem('sellflow_universal_integrations_v1');
+          var data = raw ? JSON.parse(raw) : {};
+          data.whatsapp = {
+            name: 'WhatsApp Business',
+            connected: true,
+            connectedAt: new Date().toISOString(),
+            phoneNumberId: secret,
+            displayPhone: (d.connection && d.connection.display_phone_number) || '',
+            verifiedName: (d.connection && d.connection.verified_name) || ''
+          };
+          localStorage.setItem('sellflow_universal_integrations_v1', JSON.stringify(data));
+        }catch(err){}
+
+        if(btn){ btn.disabled = false; btn.textContent = 'Connecter l\'application →'; }
+        var form = document.getElementById('sfIntForm');
+        var success = document.getElementById('sfIntSuccess');
+        if(form) form.hidden = true;
+        if(success) success.hidden = false;
+        var st = document.getElementById('sfIntSuccessTitle');
+        var sx = document.getElementById('sfIntSuccessText');
+        if(st) st.textContent = 'WhatsApp Business connecte';
+        if(sx) sx.textContent = 'Token verifie. Les relances seront envoyees automatiquement par l\'agent IA, sans ouvrir WhatsApp.';
+        if(typeof toast==='function') toast('✓ WhatsApp API connectee');
+        return;
+      }catch(err){
+        if(btn){ btn.disabled = false; btn.textContent = 'Connecter l\'application →'; }
+        if(typeof toast==='function') toast('✕ ' + (err.message || 'Connexion WhatsApp impossible'));
+        return;
+      }
+    }
+
+    if(typeof prevConnect === 'function') return prevConnect.apply(this, arguments);
+  };
+})();
+</script>
+
+
+<script id="sf-whatsapp-form-hints">
+(function(){
+  var prev = window.openUniversalIntegrationConfig;
+  if(typeof prev !== 'function') return;
+  window.openUniversalIntegrationConfig = function(name, desc, slug){
+    var r = prev.apply(this, arguments);
+    if(String(slug||'') === 'whatsapp'){
+      var key = document.getElementById('sfIntApiKey');
+      var secret = document.getElementById('sfIntSecret');
+      var note = document.querySelector('#sfIntForm .sf-int-note');
+      if(key) key.placeholder = 'Token d\'accès Meta (EAA...)';
+      if(secret){
+        secret.placeholder = 'Phone Number ID (ex. 123456789012345)';
+        var lab = secret.previousElementSibling;
+        if(lab && lab.tagName === 'LABEL'){
+          lab.innerHTML = 'Phone Number ID <b class="required">*</b>';
+        }
+      }
+      if(note){
+        note.innerHTML = '<b>🔒 WhatsApp Cloud API (Meta)</b><br>1) Token d\'accès permanent ou temporaire<br>2) Phone Number ID du numéro WhatsApp Business<br>Les relances partiront automatiquement via l\'API, sans ouvrir WhatsApp.';
+      }
+    }
+    return r;
+  };
+})();
+</script>
+
+<style id="sf-v3-css">
+body.sfv3-lock{overflow:hidden}
+#sfv3Modal{display:none;position:fixed;inset:0;z-index:2147483000}#sfv3Modal.open{display:block}
+.sfv3-back{position:absolute;inset:0;background:rgba(3,6,14,.74)}
+.sfv3-card{position:absolute;left:50%;bottom:0;transform:translateX(-50%);width:min(560px,100%);max-height:92vh;overflow:auto;box-sizing:border-box;background:#0f1424;border:1px solid #232b45;border-radius:22px 22px 0 0;padding:22px 18px calc(22px + env(safe-area-inset-bottom,0px));color:#e9edf7}
+@media(min-width:700px){.sfv3-card{top:50%;bottom:auto;transform:translate(-50%,-50%);border-radius:22px}}
+.sfv3-x{position:absolute;right:12px;top:12px;width:38px;height:38px;border-radius:12px;border:1px solid #232b45;background:#151b2e;color:#e9edf7;font-size:15px;cursor:pointer}
+.sfv3-card h2{margin:4px 40px 14px 0;font-size:22px;line-height:1.2}
+.sfv3-card .eyebrow{color:#b7ff00;font-size:11px;letter-spacing:.14em;font-weight:800}
+.sfv3-steps{display:flex;gap:8px;margin:0 0 16px}.sfv3-steps span{flex:1;display:flex;gap:6px;align-items:center;font-size:11px;color:#8b93ab;border-bottom:3px solid #232b45;padding-bottom:8px}
+.sfv3-steps span.on{color:#fff;border-color:#7c5cff}.sfv3-steps span.done{color:#b7ff00;border-color:#b7ff00}
+.sfv3-steps i{font-style:normal;width:20px;height:20px;border-radius:50%;background:#232b45;display:grid;place-items:center;font-size:11px;flex:0 0 20px}.sfv3-steps .on i{background:#7c5cff;color:#fff}.sfv3-steps .done i{background:#b7ff00;color:#0b1200}
+.sfv3-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 12px}.sfv3-grid div{background:#151b2e;border:1px solid #232b45;border-radius:12px;padding:10px;min-width:0}.sfv3-grid small{display:block;color:#8b93ab;font-size:11px;margin-bottom:2px}.sfv3-grid b{font-size:13px;word-break:break-word}
+.sfv3-msg{background:#0a0e1a;border:1px dashed #3a4468;border-radius:12px;padding:12px;font-size:13px;line-height:1.55;margin:6px 0 10px}
+.sfv3-actions{display:flex;gap:10px;margin-top:14px}.sfv3-actions .btn{flex:1}
+.sfv3-err{background:rgba(255,80,100,.12);border:1px solid rgba(255,80,100,.4);color:#ffb3bd;border-radius:12px;padding:10px;font-size:13px;margin-top:10px}
+.sfv3-ok{background:rgba(120,255,160,.1);border:1px solid rgba(120,255,160,.4);color:#9dffbf;border-radius:12px;padding:10px;font-size:14px;font-weight:700;margin:6px 0 10px}
+.sfv3-l{display:block;font-size:12px;color:#8b93ab;margin:12px 0 6px}.sfv3-list{padding-left:20px;line-height:1.7;margin:0 0 10px}
+.sfv3-card .field,.sfv3-card2 .field{width:100%;box-sizing:border-box;font-size:16px!important}
+.sfv3-row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid #232b45}.sfv3-main{min-width:0}.sfv3-main b{display:block}.sfv3-main small{display:block;color:#8b93ab;font-size:11px;margin-top:2px}.sfv3-side{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;font-size:11px;color:#8b93ab}
+.sfv3-card2{margin:14px 0;padding:16px;border:1px solid #232b45;border-radius:18px;background:#101628}.sfv3-card2 h3{margin:0 0 6px}
+.sfv3-prod .sfv3-img{aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:linear-gradient(135deg,#2a2150,#1c3156);display:grid;place-items:center;font-size:34px;color:#cfd6ee}.sfv3-img img{width:100%;height:100%;object-fit:cover;display:block}
+.sfv3-pbody{padding-top:12px}.sfv3-pbody small{display:block;color:#8b93ab;margin-top:3px}.sfv3-prow{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+</style>
+
+<script id="sf-v3-js">
+(function(){
+'use strict';
+var LS=window.localStorage,SS=window.sessionStorage;
+function $(i){return document.getElementById(i)}
+function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function say(m){try{window.toast&&window.toast(m)}catch(e){}}
+function money(n){return Math.round(Number(n)||0).toLocaleString('fr-FR')+' FCFA'}
+function jget(k,d){try{var v=JSON.parse(LS.getItem(k));return v==null?d:v}catch(e){return d}}
+function jset(k,v){try{LS.setItem(k,JSON.stringify(v))}catch(e){}}
+function api(){return String(window.SF_API||'https://sellflow-backend.onrender.com').replace(/\/+$/,'')}
+function tok(){try{return LS.getItem('sellflow_token')||LS.getItem('sellflow_access_token')||SS.getItem('sellflow_token')||''}catch(e){return ''}}
+async function call(path,opt){opt=opt||{};var h={'Content-Type':'application/json',Accept:'application/json'};if(tok())h.Authorization='Bearer '+tok();
+ var r=await fetch(api()+path,{method:opt.method||'GET',headers:h,body:opt.body?JSON.stringify(opt.body):undefined});var d=await r.json().catch(function(){return {}});d.__status=r.status;d.__ok=r.ok;return d}
+
+/* ================= SFD : source unique de vérité ================= */
+function pick(o,keys){for(var i=0;i<keys.length;i++){var v=keys[i].split('.').reduce(function(a,b){return a==null?a:a[b]},o);if(v!=null&&v!=='')return v}return null}
+function deepFind(o,keyRe,valOk,depth){depth=depth==null?3:depth;if(!o||typeof o!=='object'||depth<0)return null;
+ for(var k in o){var v=o[k];if(keyRe.test(k)&&(typeof v==='string'||typeof v==='number')&&(!valOk||valOk(String(v))))return String(v)}
+ for(var k2 in o){var r=deepFind(o[k2],keyRe,valOk,depth-1);if(r)return r}return null}
+function num(v){if(v==null)return 0;if(typeof v==='object')v=v.value!=null?v.value:v.amount!=null?v.amount:v.total!=null?v.total:0;var n=Number(String(v).replace(/[^0-9.\-]/g,''));return isFinite(n)?n:0}
+var SFD={
+ st:function(s){return String(pick(s,['status','payment_status','state','payment.status'])||'').toLowerCase().replace(/[\s\-]+/g,'_')},
+ cls:function(s){var x=SFD.st(s);if(!x)return 'unknown';
+  if(/(fail|declin|refus|reject|cancel|expir|error)/.test(x))return 'failed';
+  if(/abandon/.test(x))return 'abandoned';
+  if(/(pending|await|wait|process|not_?paid|unpaid|incomplete|initiat|open|created)/.test(x))return 'pending';
+  if(/refund/.test(x))return 'refunded';
+  if(/(paid|settl|success|succeed|complet|confirm|valid|approv|captur|deliver|accept)/.test(x))return 'paid';return 'unknown'},
+ isPaid:function(s){return SFD.cls(s)==='paid'},
+ amount:function(s){return num(pick(s,['total','amount','price.value','total_amount','grand_total','paid_amount','payment.amount','order.total']))},
+ date:function(s){var v=pick(s,['paid_at','completed_at','created_at','createdAt','date']);if(!v)return null;var d=new Date(typeof v==='number'&&v<1e12?v*1000:v);return isNaN(d)?null:d},
+ cust:function(s){var c=(s&&(s.customer||s.client))||{};return c},
+ name:function(s){var c=SFD.cust(s);return pick(c,['name','full_name','fullName'])||((pick(c,['first_name','firstName'])||'')+' '+(pick(c,['last_name','lastName'])||'')).trim()||pick(s,['customer_name','buyer_name','client_name'])||pick(c,['email'])||'Client'},
+ email:function(s){return String(pick(SFD.cust(s),['email','email_address'])||pick(s,['customer_email','email'])||'').toLowerCase()},
+ phone:function(s){var c=SFD.cust(s),v=pick(c,['phone','phone_number','mobile','whatsapp','telephone'])||pick(s,['customer_phone','buyer_phone','phone']);
+  if(v&&typeof v==='object'){v=(v.country_code||v.dial_code||'')+(v.number||v.national_number||v.value||'')}
+  if(!v){var em=SFD.email(s),all=(window.state&&window.state.customers)||[];for(var i=0;i<all.length;i++){var cu=all[i];if(em&&String(pick(cu,['email'])||'').toLowerCase()===em){v=pick(cu,['phone','phone_number','mobile','whatsapp','telephone']);if(v&&typeof v==='object')v=(v.country_code||'')+(v.number||'');break}}}
+  if(!v)v=deepFind(s,/phone|mobile|whatsapp/i,function(x){return /\d{7,}/.test(x)});
+  var local=jget('sf_phones',{})[SFD.email(s)||SFD.name(s)];return String(v||local||'').replace(/[^\d+]/g,'')},
+ product:function(s){var p=(s&&(s.product||s.item))||{};return pick(p,['name','title'])||pick(s,['product_name','item_name'])||'Produit'},
+ link:function(s){var p=(s&&(s.product||s.item))||{},st=(window.state&&window.state.store)||{};return pick(p,['url','checkout_url','link','public_url','permalink'])||pick(s,['checkout_url','payment_url','product_url'])||pick(st,['url','domain'])||''},
+ sid:function(s){return String(pick(s,['id','uuid','reference','number'])||(SFD.name(s)+'|'+(SFD.date(s)||'')))},
+ reason:function(s){return String(pick(s,['failure_reason','payment.failure_reason','error_message','failure.message','reason','failure.reason'])||deepFind(s,/(fail|error|reason)/i,function(x){return x.length>3&&x.length<200&&!/^(failed|error)$/i.test(x)})||'')},
+ label:function(c){return {paid:'Validée',failed:'Paiement échoué',abandoned:'Abandonnée',pending:'En attente',refunded:'Remboursée',unknown:'Statut inconnu'}[c]||c},
+ relances:function(){return jget('sf_relances',[])},
+ relanced:function(id){return SFD.relances().some(function(r){return r.sid===id&&r.ok})},
+ metrics:function(){
+  var S=window.state||{},live=!!S.live,sales=live?(S.sales||[]):[],M={live:live,total:sales.length,paid:[],failed:[],abandoned:[],pending:[],unknown:[],refunded:[],breakdown:{}};
+  sales.forEach(function(s){var c=SFD.cls(s);M[c].push(s);var k=SFD.st(s)||'(vide)';M.breakdown[k]=(M.breakdown[k]||0)+1});
+  M.revenue=M.paid.reduce(function(a,s){return a+SFD.amount(s)},0);M.paidCount=M.paid.length;
+  M.conversion=M.total?Math.round(M.paidCount/M.total*1000)/10:null;
+  M.toVerify=M.failed.concat(M.pending,M.abandoned,M.unknown);
+  var paidKeys={};M.paid.forEach(function(s){paidKeys[(SFD.email(s)||SFD.name(s))+'|'+SFD.product(s)]=1});
+  var seen={};M.prospects=[];M.pending.concat(M.abandoned).forEach(function(s){var k=(SFD.email(s)||SFD.name(s));if(seen[k]||paidKeys[k+'|'+SFD.product(s)])return;seen[k]=1;M.prospects.push(s)});
+  M.relanceTodo=M.failed.concat(M.abandoned,M.pending).filter(function(s){return !SFD.relanced(SFD.sid(s))});
+  M.relanceSent=SFD.relances().filter(function(r){return r.ok}).length;return M}
+};
+window.SFD=SFD;
+
+/* ================= peinture : tableau de bord / rapports ================= */
+function setTxt(el,t){if(el&&el.textContent!==t)el.textContent=t}
+function paintDashboard(M){
+ var pg=$('page-dashboard');if(!pg||!M.live)return;var k=pg.querySelectorAll('.kpi-value');
+ var conv=M.conversion==null?'N/D':String(M.conversion).replace('.',',')+' %';
+ var vals=[money(M.revenue),String(M.prospects.length),conv,String(M.relanceTodo.length)];
+ var subs=['Ventes validées uniquement ('+M.paidCount+')','Paiements en attente ou abandonnés','Validées '+M.paidCount+' / '+M.total+' commandes','À faire · '+M.relanceSent+' envoyée(s)'];
+ vals.forEach(function(v,i){if(!k[i])return;setTxt(k[i],v);var card=k[i].closest('.card');var sub=card&&card.querySelector('.sub,.kpi-sub');if(sub)setTxt(sub,subs[i])});
+ var list=pg.querySelector('.action-list');
+ if(list){var sig=[M.prospects.length,M.toVerify.length,M.relanceTodo.length,M.relanceSent].join('/');
+  if(list.getAttribute('data-sfv3')!==sig){list.setAttribute('data-sfv3',sig);
+   list.innerHTML=[['🔥','Prospects actifs',M.prospects.length+' client(s) avec un paiement en attente ou abandonné','prospects'],['⚠️','Ventes à vérifier',M.toVerify.length+' vente(s) échouée(s), en attente ou abandonnée(s)','verify'],['⚙️','Relances',M.relanceTodo.length+' à faire · '+M.relanceSent+' envoyée(s)','relances']].map(function(a){
+    return '<button type="button" class="action-card" data-sfgo="'+a[3]+'" style="cursor:pointer;text-align:left;width:100%"><span class="action-icon">'+a[0]+'</span><span class="action-copy"><b>'+a[1]+'</b><small>'+a[2]+'</small></span></button>'}).join('')}}
+}
+function paintReports(M){
+ var pg=$('page-reports');if(!pg||!M.live)return;
+ setTxt($('sfRepSales'),String(M.paidCount));setTxt($('sfRepRevenue'),money(M.revenue));setTxt($('sfRepFailed'),String(M.failed.length));
+ var box=$('sfBreakdown');if(!box){var h=pg.querySelector('.page-head');if(h){box=document.createElement('div');box.id='sfBreakdown';box.className='sub';box.style.cssText='margin:0 0 12px;font-size:11px';h.insertAdjacentElement('afterend',box)}}
+ if(box)setTxt(box,'Statuts reçus de Chariow : '+(Object.keys(M.breakdown).map(function(k){return k+' ×'+M.breakdown[k]}).join(' · ')||'aucun'))
+}
+function paintAll(){try{var M=SFD.metrics();paintDashboard(M);paintReports(M);if($('page-actions')&&$('page-actions').classList.contains('active'))renderActions(M);paintProducts()}catch(e){}}
+var ptimer=null;function schedulePaint(){clearTimeout(ptimer);ptimer=setTimeout(paintAll,60)}
+window.sfPaintAll=paintAll;
+
+/* ================= page À faire : listes réelles ================= */
+function row(a,b,c,btns){return '<div class="sfv3-row"><div class="sfv3-main"><b>'+esc(a)+'</b><small>'+esc(b)+'</small></div><div class="sfv3-side">'+(c?'<span>'+esc(c)+'</span>':'')+(btns||'')+'</div></div>'}
+function btn(l,fn,id,cls){return '<button type="button" class="btn '+(cls||'')+'" style="padding:7px 11px;font-size:11px" data-sfact="'+fn+'" data-sid="'+esc(id)+'">'+l+'</button>'}
+function renderActions(M){
+ M=M||SFD.metrics();var box=$('sfDashLiveActionDetails');if(!box)return;
+ if(!M.live){box.innerHTML='<div class="card"><h3>Données Chariow requises</h3><p>Connecte ta boutique pour voir tes priorités.</p></div>';return}
+ var byId={};(M.prospects.concat(M.toVerify)).forEach(function(s){byId[SFD.sid(s)]=s});window.__sfSales=byId;
+ var sec=function(id,title,sub,html){return '<div class="card section" id="sfAct-'+id+'" style="grid-column:1/-1"><div class="section-title"><div><h3>'+title+'</h3><span>'+sub+'</span></div></div>'+(html||'<p class="sub">Rien à traiter.</p>')+'</div>'};
+ var pr=M.prospects.slice(0,40).map(function(s){var id=SFD.sid(s);return row(SFD.name(s),SFD.product(s)+' · '+money(SFD.amount(s)),SFD.label(SFD.cls(s)),btn('⚡ Relancer','relance',id,'primary'))}).join('');
+ var ve=M.toVerify.slice(0,60).map(function(s){var id=SFD.sid(s),d=SFD.date(s);return row(SFD.name(s),SFD.product(s)+' · '+money(SFD.amount(s))+' · '+(d?d.toLocaleString('fr-FR'):''),(SFD.relanced(id)?'✓ relancé · ':'')+SFD.label(SFD.cls(s)),btn('Vérifier','verify',id)+btn('⚡ Relancer','relance',id,'primary'))}).join('');
+ var lg=SFD.relances().slice(0,40).map(function(r){return row(r.name||'Client',(r.phone?r.phone.replace(/(\d{3})\d+(\d{3})/,'$1•••$2'):'')+' · '+new Date(r.at).toLocaleString('fr-FR')+(r.err?' · '+r.err:''),r.ok?'✓ envoyée':'✕ échec',''
+ )}).join('');
+ box.innerHTML=sec('prospects','🔥 Prospects actifs',M.prospects.length+' client(s)',pr)+sec('verify','⚠️ Ventes à vérifier',M.toVerify.length+' vente(s)',ve)+sec('relances','⚙️ Relances',M.relanceTodo.length+' à faire · '+M.relanceSent+' envoyée(s)',lg)
+}
+window.sfGoActions=function(section){try{window.go('actions')}catch(e){}setTimeout(function(){renderActions();var el=$('sfAct-'+section);if(el)el.scrollIntoView({behavior:'smooth',block:'start'})},120)};
+
+/* ================= synchro Chariow silencieuse + événements ================= */
+var sync={busy:false,lastFull:0,seen:null};
+async function listCh(path,key){var out=[],cur='',g=0;do{var u='https://api.chariow.com/v1'+path+'?per_page=100'+(cur?'&cursor='+encodeURIComponent(cur):'');
+  var r=await fetch(u,{headers:{Authorization:'Bearer '+key,Accept:'application/json'}});var d=await r.json().catch(function(){return {}});if(!r.ok)throw new Error(d.message||d.error||('Chariow '+r.status));
+  var box=d&&d.data||{};var rows=Array.isArray(box)?box:(box.data||[]);out=out.concat(rows);cur=box.pagination&&box.pagination.next_cursor||''}while(cur&&++g<12);return out}
+async function quietSync(force){
+ var key=SS.getItem('sellflow_chariow_api_key');if(!key||!tok()||sync.busy)return;if(document.hidden&&!force)return;
+ sync.busy=true;try{
+  var S=window.state;if(!S)return;var sales=await listCh('/sales',key);var full=force||Date.now()-sync.lastFull>300000;
+  if(full){try{S.customers=await listCh('/customers',key);S.products=await listCh('/products',key);sync.lastFull=Date.now()}catch(e){}}
+  var paidNow={};sales.forEach(function(s){if(SFD.isPaid(s))paidNow[SFD.sid(s)]=s});
+  if(sync.seen){Object.keys(paidNow).forEach(function(id){if(!sync.seen[id]){var s=paidNow[id];say('💰 Nouvelle vente : '+SFD.name(s)+' · '+money(SFD.amount(s)))}})}
+  sync.seen=Object.keys(paidNow).reduce(function(a,k){a[k]=1;return a},{});
+  S.sales=sales;S.syncedAt=Date.now();S.live=true;
+  try{window.applyKPIs&&window.applyKPIs();window.renderOrders&&window.renderOrders();window.renderCustomersIntoCRM&&window.renderCustomersIntoCRM();window.updateStorePanel&&window.updateStorePanel();var an=$('page-analytics');if(an&&an.classList.contains('active')&&window.renderAnalytics)window.renderAnalytics()}catch(e){}
+  paintAll();
+  try{var ls=$('sfLiveSync');if(ls)ls.textContent='Dernière synchronisation : '+new Date().toLocaleString('fr-FR')}catch(e){}
+ }catch(e){}finally{sync.busy=false}
+}
+window.sfQuietSync=quietSync;
+var evSince=Date.now();
+async function pollEvents(){if(!tok()||document.hidden)return;try{var d=await call('/automations/events?since='+evSince);if(d.__ok&&d.count>0){evSince=d.latest||Date.now();quietSync(true)}}catch(e){}}
+setInterval(function(){quietSync(false)},30000);setInterval(pollEvents,12000);
+document.addEventListener('visibilitychange',function(){if(!document.hidden)quietSync(true)});window.addEventListener('focus',function(){quietSync(true)});window.addEventListener('online',function(){quietSync(true)});
+setTimeout(function(){quietSync(true)},4000);
+
+/* ================= observateurs ================= */
+function watch(){['page-dashboard','page-reports','page-products'].forEach(function(id){var el=$(id);if(el&&!el.__sfw&&window.MutationObserver){el.__sfw=1;new MutationObserver(schedulePaint).observe(el,{childList:true,subtree:true,characterData:true})}})}
+setInterval(function(){watch();paintAll()},3000);setTimeout(function(){watch();paintAll()},800);
+var prevGo=window.go;window.go=function(p){var r=typeof prevGo==='function'?prevGo.apply(this,arguments):undefined;setTimeout(function(){watch();paintAll();if(p==='actions')renderActions()},50);return r};
+
+document.addEventListener('click',function(e){var t=e.target&&e.target.closest?e.target.closest('[data-sfgo],[data-sfact]'):null;if(!t)return;
+ if(t.hasAttribute('data-sfgo')){e.preventDefault();e.stopPropagation();window.sfGoActions(t.getAttribute('data-sfgo'));return}
+ var s=(window.__sfSales||{})[t.getAttribute('data-sid')];if(!s)return;e.preventDefault();e.stopPropagation();
+ if(t.getAttribute('data-sfact')==='verify')window.sfOpenRelance(s,{step:1});else window.sfOpenRelance(s,{step:2})},true);
+
+window.__sfv3={$:$,esc:esc,say:say,money:money,jget:jget,jset:jset,call:call,api:api,tok:tok,pick:pick,deepFind:deepFind,paintAll:paintAll,renderActions:renderActions,quietSync:quietSync,SFD:SFD};
+
+})();
+(function(){
+'use strict';
+var X=window.__sfv3,$=X.$,esc=X.esc,say=X.say,money=X.money,jget=X.jget,jset=X.jset,call=X.call,SFD=X.SFD,pick=X.pick,deepFind=X.deepFind,SS=window.sessionStorage;
+
+/* ================= fenêtre modale ================= */
+function modal(html){var m=$('sfv3Modal');if(!m){m=document.createElement('div');m.id='sfv3Modal';document.body.appendChild(m)}
+ m.innerHTML='<div class="sfv3-back" data-sfclose="1"></div><div class="sfv3-card" role="dialog" aria-modal="true"><button type="button" class="sfv3-x" data-sfclose="1" aria-label="Fermer">✕</button>'+html+'</div>';m.className='open';document.body.classList.add('sfv3-lock')}
+function closeModal(){var m=$('sfv3Modal');if(m){m.className='';m.innerHTML=''}document.body.classList.remove('sfv3-lock')}
+document.addEventListener('click',function(e){if(e.target.closest&&e.target.closest('[data-sfclose]')){e.preventDefault();closeModal()}},true);
+function busy(b,on,txt){if(!b)return;b.disabled=!!on;if(txt)b.setAttribute('data-t',b.getAttribute('data-t')||b.textContent);b.textContent=on?txt:(b.getAttribute('data-t')||b.textContent)}
+function steps(n,labels){return '<div class="sfv3-steps">'+labels.map(function(l,i){return '<span class="'+(i+1===n?'on':i+1<n?'done':'')+'"><i>'+(i+1<n?'✓':i+1)+'</i>'+l+'</span>'}).join('')+'</div>'}
+function normPhone(v){var d=String(v||'').replace(/[^\d+]/g,'');if(d.indexOf('00')===0)d='+'+d.slice(2);return d}
+function phoneOk(v){return /^\+?\d{9,15}$/.test(normPhone(v))&&!/^0\d{8,9}$/.test(normPhone(v))}
+function logRelance(r){var l=SFD.relances();l.unshift(r);jset('sf_relances',l.slice(0,300))}
+
+/* ================= assistant de relance (envoi réel par l'API WhatsApp) ================= */
+window.sfOpenRelance=function(sale,opt){
+ opt=opt||{};var S={sale:sale,step:opt.step||1,phone:SFD.phone(sale),res:null,err:null};
+ var name=SFD.name(sale),cls=SFD.cls(sale),prod=SFD.product(sale),amt=SFD.amount(sale),link=SFD.link(sale),d=SFD.date(sale);
+ function preview(){var base='Bonjour '+name+', votre paiement de '+money(amt)+' pour « '+prod+' » n\u2019a pas abouti.';return link?base+' Vous pouvez le reprendre ici : '+link:base+' Répondez à ce message et nous vous aidons à finaliser.'}
+ function draw(){
+  var head='<div class="eyebrow">ACTION COMMERCIALE</div><h2>'+esc(cls==='failed'?'Paiement échoué':cls==='abandoned'?'Achat abandonné':'Paiement à vérifier')+'</h2>'+steps(S.step,['Diagnostic','Résolution','Étape suivante']);
+  if(S.step===1){
+   var tip=cls==='failed'?'Le paiement a été refusé ou interrompu. Une relance avec le lien de paiement est la meilleure action.':cls==='abandoned'?'Le client a quitté le paiement. Une relance rapide récupère souvent la vente.':'Le paiement est en attente. Vérifie son statut, puis relance si besoin.';
+   var why=SFD.reason(sale);
+   modal(head+'<div class="sfv3-grid"><div><small>Client</small><b>'+esc(name)+'</b></div><div><small>Produit</small><b>'+esc(prod)+'</b></div><div><small>Montant</small><b>'+money(amt)+'</b></div><div><small>Statut Chariow</small><b>'+esc(SFD.st(sale)||'—')+'</b></div><div><small>Date</small><b>'+(d?d.toLocaleString('fr-FR'):'—')+'</b></div><div><small>Téléphone</small><b>'+(S.phone?esc(S.phone):'manquant')+'</b></div></div>'+(why?'<p class="sub">Raison indiquée : '+esc(why)+'</p>':'')+'<p class="sub">'+tip+(SFD.relanced(SFD.sid(sale))?' <b>Déjà relancé.</b>':'')+'</p><div class="sfv3-actions"><button type="button" class="btn" data-sfclose="1">Annuler</button><button type="button" class="btn primary" id="sfv3Next">Continuer vers la relance →</button></div>');
+   $('sfv3Next').onclick=function(){S.step=2;draw()}
+  }else if(S.step===2){
+   modal(head+'<label class="sfv3-l">Numéro WhatsApp du client (avec indicatif pays)</label><input id="sfv3Phone" class="field" inputmode="tel" placeholder="+225 07 00 00 00 00" value="'+esc(S.phone)+'"><p class="sub" id="sfv3Hint">'+(S.phone&&!phoneOk(S.phone)?'Ce numéro semble incomplet : ajoute l\u2019indicatif (ex. +225).':'')+'</p><label class="sfv3-l">Message envoyé par l\u2019API WhatsApp</label><div class="sfv3-msg">'+esc(preview())+'</div><p class="sub">L\u2019envoi se fait directement depuis ton numéro WhatsApp Business connecté, sans ouvrir WhatsApp.</p><div id="sfv3Err" class="sfv3-err" style="display:none"></div><div class="sfv3-actions"><button type="button" class="btn" id="sfv3Back">← Retour</button><button type="button" class="btn primary" id="sfv3Send">Envoyer la relance</button></div>');
+   $('sfv3Back').onclick=function(){S.step=1;draw()};
+   $('sfv3Send').onclick=async function(){
+    var p=normPhone($('sfv3Phone').value),er=$('sfv3Err');er.style.display='none';
+    if(!phoneOk(p)){er.textContent='Numéro invalide : entre-le avec l\u2019indicatif pays, par exemple +22507000000.';er.style.display='block';return}
+    var ph=jget('sf_phones',{});ph[SFD.email(sale)||name]=p;jset('sf_phones',ph);S.phone=p;
+    busy(this,true,'Envoi en cours…');
+    var r;try{r=await call('/whatsapp/relance',{method:'POST',body:{name:name,phone:p,amount:money(amt),product:prod,link:link,sale_id:SFD.sid(sale),message:preview()}})}catch(e){r={__ok:false,error:'Serveur injoignable',code:'NETWORK'}}
+    busy(this,false);
+    if(r.__ok&&r.ok!==false){logRelance({sid:SFD.sid(sale),name:name,phone:p,at:Date.now(),ok:true,mid:r.message_id||''});S.res=r;S.step=3;draw();window.sfPaintAll&&window.sfPaintAll();return}
+    logRelance({sid:SFD.sid(sale),name:name,phone:p,at:Date.now(),ok:false,err:String(r.error||r.message||'').slice(0,120)});
+    var code=r.code||'',msg=r.error||r.message||'Envoi impossible.';
+    if(code==='WHATSAPP_NOT_CONNECTED'||/non connect|not connected/i.test(msg))msg='WhatsApp n\u2019est pas connecté. Va dans Réglages → Canaux & intégrations → WhatsApp Business.';
+    else if(code==='TEMPLATE_REQUIRED')msg='Meta exige un modèle de message approuvé pour écrire à un client qui n\u2019a pas écrit depuis 24 h. Renseigne le nom du modèle dans Réglages → Automatisations, puis réessaie.';
+    else if(code==='NETWORK')msg='Le serveur SellFlow ne répond pas. Réessaie dans un instant.';
+    er.textContent='✕ '+msg;er.style.display='block'}
+  }else{
+   modal(head+'<div class="sfv3-ok">✓ Relance envoyée à '+esc(name)+'</div><p class="sub">Message transmis par WhatsApp au '+esc(S.phone)+(S.res&&S.res.message_id?' · réf. '+esc(String(S.res.message_id).slice(0,18)):'')+'.</p><div class="sfv3-grid"><div><small>Étape suivante</small><b>Vérifier le paiement dans 24 h</b></div><div><small>Suivi</small><b>Enregistré dans « Relances »</b></div></div><div class="sfv3-actions"><button type="button" class="btn" id="sfv3Seen">Voir mes relances</button><button type="button" class="btn primary" data-sfclose="1">Terminer</button></div>');
+   $('sfv3Seen').onclick=function(){closeModal();window.sfGoActions('relances')}}
+ }
+ draw()};
+function findSale(name,amount){var M=SFD.metrics(),all=M.toVerify.concat(M.paid),n=String(name||'').toLowerCase();
+ for(var i=0;i<all.length;i++){if(SFD.name(all[i]).toLowerCase()===n&&(!amount||Math.abs(SFD.amount(all[i])-Number(String(amount).replace(/[^\d]/g,'')))<1))return all[i]}
+ for(var j=0;j<all.length;j++){if(SFD.name(all[j]).toLowerCase()===n)return all[j]}return null}
+window.sfRelanceClient=function(a){var o=(a&&typeof a==='object')?a:{name:a};var s=findSale(o.name||o.client,o.amount||o.total)||{customer:{name:o.name||o.client||'Client',phone:o.phone},total:o.amount||o.total||0,product:{name:o.product||'Produit'},status:'failed',id:'manual-'+(o.name||'client')};
+ window.sfOpenRelance(s,{step:2})};
+var prevOA=window.openAction;window.openAction=function(type,name){var s=findSale(name);if(s&&/payment|relance|failed|verify/i.test(String(type))){window.sfOpenRelance(s,{step:1});return}if(typeof prevOA==='function')return prevOA.apply(this,arguments)};
+
+/* ================= tests du moteur : résultats réels visibles ================= */
+window.simulateAutomation=function(type){
+ var M=SFD.metrics(),rules=jget('sf_rules',{}),delay='1 minute';
+ if(!M.live){modal('<h2>Test impossible</h2><p class="sub">Connecte d\u2019abord ta boutique Chariow : le test utilise tes vraies données, jamais des données inventées.</p><div class="sfv3-actions"><button type="button" class="btn primary" data-sfclose="1">Fermer</button></div>');return}
+ var set={'new-lead':[M.prospects,'Nouveau prospect',function(s){return 'Prospect détecté : '+SFD.name(s)+' ('+SFD.product(s)+')'}],'abandoned':[M.abandoned.concat(M.pending),'Achat abandonné',function(s){return 'Abandon détecté : '+SFD.name(s)+' · '+money(SFD.amount(s))}],'payment-failed':[M.failed,'Paiement échoué',function(s){return 'Échec détecté : '+SFD.name(s)+' · '+money(SFD.amount(s))}]}[type]||[[],'Test',String];
+ var list=set[0].slice().sort(function(a,b){return (SFD.date(b)||0)-(SFD.date(a)||0)}),s=list[0];
+ if(!s){modal('<h2>'+set[1]+'</h2><p class="sub">Aucune situation correspondante dans tes données Chariow actuelles. Rien n\u2019est simulé avec de fausses données.</p><div class="sfv3-actions"><button type="button" class="btn primary" data-sfclose="1">Fermer</button></div>');return}
+ var ruleKey=type==='payment-failed'?'failed':type==='abandoned'?'abandoned':'waiting',on=rules.master!==false&&rules[ruleKey]!==false;
+ var msg='Bonjour '+SFD.name(s)+', votre paiement de '+money(SFD.amount(s))+' pour « '+SFD.product(s)+' » n\u2019a pas abouti.'+(SFD.link(s)?' Reprenez-le ici : '+SFD.link(s):'');
+ modal('<div class="eyebrow">TEST DU MOTEUR · DONNÉES RÉELLES</div><h2>'+set[1]+'</h2><ol class="sfv3-list"><li>✓ '+esc(set[2](s))+'</li><li>✓ Qualification : '+esc(SFD.label(SFD.cls(s)))+' · statut Chariow « '+esc(SFD.st(s))+' »</li><li>'+(on?'✓':'✕')+' Règle « '+esc(set[1])+' » '+(on?'activée':'désactivée : aucune relance automatique')+'</li><li>✓ Délai avant relance : '+delay+'</li><li>✓ Message préparé :</li></ol><div class="sfv3-msg">'+esc(msg)+'</div><p class="sub">Aucun message n\u2019a été envoyé au client. Pour vérifier l\u2019envoi réel, envoie ce test à ton propre numéro :</p><input id="sfv3TestPhone" class="field" inputmode="tel" placeholder="+225 07 00 00 00 00"><div id="sfv3Err" class="sfv3-err" style="display:none"></div><div class="sfv3-actions"><button type="button" class="btn" data-sfclose="1">Fermer</button><button type="button" class="btn primary" id="sfv3TestSend">Envoyer à mon numéro</button></div>');
+ var res=$('sf-automation-result');if(res)res.textContent='Dernier test : '+set[1]+' · '+SFD.name(s)+' · '+new Date().toLocaleTimeString('fr-FR');
+ $('sfv3TestSend').onclick=async function(){var p=normPhone($('sfv3TestPhone').value),er=$('sfv3Err');er.style.display='none';if(!phoneOk(p)){er.textContent='Entre ton numéro avec l\u2019indicatif pays.';er.style.display='block';return}
+  busy(this,true,'Envoi…');var r;try{r=await call('/whatsapp/relance',{method:'POST',body:{name:'Test SellFlow',phone:p,amount:money(SFD.amount(s)),product:SFD.product(s),link:SFD.link(s),sale_id:'test-'+Date.now(),message:msg,test:true}})}catch(e){r={__ok:false,error:'Serveur injoignable'}}busy(this,false);
+  if(r.__ok&&r.ok!==false){er.className='sfv3-ok';er.textContent='✓ Message de test envoyé à '+p;er.style.display='block'}else{er.className='sfv3-err';er.textContent='✕ '+(r.error||r.message||'Envoi impossible')+(r.code==='TEMPLATE_REQUIRED'?' — renseigne le modèle Meta dans Réglages → Automatisations.':'');er.style.display='block'}}};
+
+/* ================= règles : sauvegarde réelle + carte serveur ================= */
+function applyRules(){var r=jget('sf_rules',null);if(!r)return;document.querySelectorAll('[data-sf-rule]').forEach(function(i){var k=i.getAttribute('data-sf-rule');if(r[k]!=null&&i.checked!==!!r[k])i.checked=!!r[k]});var m=$('sf-engine-master');if(m&&r.master!=null&&m.checked!==!!r.master)m.checked=!!r.master}
+document.addEventListener('change',function(e){var t=e.target;if(!t||!t.matches)return;
+ if(t.matches('[data-sf-rule],#sf-engine-master')){var r=jget('sf_rules',{}),k=t.id==='sf-engine-master'?'master':t.getAttribute('data-sf-rule');r[k]=t.checked;jset('sf_rules',r);say((t.checked?'✓ Règle activée':'Règle désactivée')+' · enregistrée');pushCfg()}},true);
+async function pushCfg(extra){var body=Object.assign({rules:jget('sf_rules',{}),delay_minutes:Number(jget('sf_delay',1))},extra||{});var k=SS.getItem('sellflow_chariow_api_key');if(k)body.chariow_key=k;try{return await call('/automations/config',{method:'POST',body:body})}catch(e){return {__ok:false}}}
+async function loadSrv(){var c=$('sfSrvCard');if(!c)return;var d;try{d=await call('/automations/config')}catch(e){d={__ok:false}}
+ var st=$('sfSrvState'),tg=$('sfSrvToggle');
+ if(!d.__ok){tg.disabled=true;var t=null;try{t=await call('/whatsapp/template')}catch(e){}if(t&&t.__ok){$('sfSrvTpl').value=t.name||''}st.textContent='Relances automatiques : routes serveur à déployer ('+(d.__status||'hors ligne')+'). Le modèle WhatsApp ci-dessous fonctionne déjà pour les relances manuelles.';return}
+ tg.disabled=false;tg.checked=!!d.enabled;$('sfSrvDelay').value=String(d.delay_minutes||1);$('sfSrvWebhook').value=d.webhook_url||'';
+ $('sfSrvTpl').value=d.template_name||'';
+ st.textContent=(d.enabled?'✓ Actif : les relances partent même app fermée. ':'Désactivé. ')+(d.whatsapp_connected?'WhatsApp connecté. ':'⚠ WhatsApp non connecté. ')+(d.template_name?'Modèle : '+d.template_name+'. ':'⚠ Aucun modèle Meta renseigné. ')+(d.last_run?'Dernière exécution : '+new Date(d.last_run).toLocaleString('fr-FR')+'. ':'')+(d.sent_today!=null?d.sent_today+' envoyée(s) aujourd\u2019hui.':'')}
+function injectCard(){var box=document.querySelector('.sf-test-box');if(!box||$('sfSrvCard'))return;
+ box.insertAdjacentHTML('afterend','<div class="sfv3-card2" id="sfSrvCard"><h3>🤖 Relances automatiques (serveur)</h3><p class="sub" id="sfSrvState">Chargement…</p><div class="sf-rule"><div><b>Activer les relances automatiques</b><small>Paiements échoués et achats abandonnés, nouveaux uniquement.</small></div><label class="switch7"><input type="checkbox" id="sfSrvToggle"><span></span></label></div><label class="sfv3-l">Délai avant relance</label><select id="sfSrvDelay" class="field"><option value="1">1 minute</option><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="60">1 heure</option></select><label class="sfv3-l">Nom du modèle WhatsApp approuvé par Meta</label><div style="display:flex;gap:8px"><input id="sfSrvTpl" class="field" placeholder="ex. relance_paiement"><button type="button" class="btn" id="sfSrvTplSave">Enregistrer</button></div><label class="sfv3-l">Adresse webhook à coller dans Chariow (réception instantanée)</label><div style="display:flex;gap:8px"><input id="sfSrvWebhook" class="field" readonly><button type="button" class="btn" id="sfSrvCopy">Copier</button></div></div>');
+ $('sfSrvToggle').onchange=async function(){var on=this.checked,r=await pushCfg({enabled:on});if(!r.__ok){this.checked=!on;say('✕ '+(r.error||r.message||'Serveur injoignable'))}else say(on?'✓ Relances automatiques activées (nouvelles ventes uniquement)':'Relances automatiques désactivées');loadSrv()};
+ $('sfSrvDelay').onchange=function(){jset('sf_delay',Number(this.value));pushCfg()};
+ $('sfSrvTplSave').onclick=async function(){var r=await call('/whatsapp/template',{method:'POST',body:{name:$('sfSrvTpl').value.trim(),language:'fr'}});say(r.__ok?'✓ Modèle enregistré':'✕ '+(r.error||'Échec'));loadSrv()};
+ $('sfSrvCopy').onclick=function(){var v=$('sfSrvWebhook').value;if(!v)return say('Active d\u2019abord les relances automatiques');try{navigator.clipboard.writeText(v);say('✓ Adresse copiée')}catch(e){$('sfSrvWebhook').select()}};loadSrv()}
+setInterval(function(){injectCard();applyRules()},1500);
+
+/* ================= produits : images Chariow + création ================= */
+function findImg(p){var v=pick(p,['thumbnail.url','thumbnail','image.url','image','cover.url','cover','cover_image','picture.url','picture','photo','banner.url','banner','images.0.url','images.0','media.0.url','media.0']);if(v&&typeof v==='object')v=v.url||v.src||v.original;if(typeof v==='string'&&/^(https?:)?\/\//.test(v))return v;return deepFind(p,/(image|thumb|cover|picture|photo|banner|logo)/i,function(x){return /^https?:\/\//.test(x)})||''}
+function pPrice(p){var f=pick(p,['price.formatted','pricing.formatted','price.display']);if(f)return String(f);var n=0;var v=pick(p,['price.value','price.amount','pricing.price','price','amount']);n=Number(String(v&&typeof v==='object'?(v.value||v.amount||0):v||0).replace(/[^\d.]/g,''))||0;return n?money(n):'—'}
+window.paintProducts=function(){};
+paintProducts=function(){var pg=$('page-products'),S=window.state;if(!pg||!S||!S.live||!(S.products||[]).length)return;
+ var first=pg.querySelector('.product, .sfv3-prod'),grid=first&&first.parentElement;if(!grid)return;
+ var sig=S.products.map(function(p){return (p.id||p.name||'')+'|'+findImg(p)}).join(';');if(grid.getAttribute('data-sfv3')===sig)return;grid.setAttribute('data-sfv3',sig);
+ var noImg=0;grid.innerHTML=S.products.map(function(p){var img=findImg(p);if(!img)noImg++;return '<article class="card product sfv3-prod"><div class="sfv3-img">'+(img?'<img src="'+esc(img)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.innerHTML=\'<span>◈</span>\'">':'<span>◈</span>')+'</div><div class="sfv3-pbody"><b>'+esc(pick(p,['name','title'])||'Produit')+'</b><small>Produit Chariow · ID '+esc(p.id||'—')+'</small><div class="sfv3-prow"><strong>'+esc(pPrice(p))+'</strong><span class="status s-info">'+esc(String(pick(p,['status','state'])||'').toUpperCase()||'—')+'</span></div></div></article>'}).join('');
+ var n=$('sfImgNote');if(noImg&&!$('sfImgNote')){var h=pg.querySelector('.page-head');if(h){h.insertAdjacentHTML('afterend','<div class="sub" id="sfImgNote" style="margin:0 0 12px;font-size:11px">Chariow n\u2019a pas renvoyé d\u2019image pour '+noImg+' produit(s) via l\u2019API.</div>')}}else if(!noImg&&n)n.remove()};
+window.sfOpenNewProduct=function(){modal('<div class="eyebrow">CATALOGUE</div><h2>Nouveau produit</h2><label class="sfv3-l">Nom du produit *</label><input id="npName" class="field" placeholder="Ex. Pack complet de création vidéo"><label class="sfv3-l">Prix (FCFA) *</label><input id="npPrice" class="field" inputmode="numeric" placeholder="5000"><label class="sfv3-l">Description</label><textarea id="npDesc" class="field" rows="3"></textarea><div id="sfv3Err" class="sfv3-err" style="display:none"></div><div class="sfv3-actions"><button type="button" class="btn" data-sfclose="1">Annuler</button><button type="button" class="btn primary" id="npSave">Créer sur Chariow</button></div>');
+ $('npSave').onclick=async function(){var n=$('npName').value.trim(),pr=Number($('npPrice').value.replace(/\D/g,'')),er=$('sfv3Err'),key=SS.getItem('sellflow_chariow_api_key');er.style.display='none';
+  if(!n||!pr){er.textContent='Le nom et le prix sont obligatoires.';er.style.display='block';return}if(!key){er.textContent='Connecte d\u2019abord ta boutique Chariow.';er.style.display='block';return}
+  busy(this,true,'Création…');var out;try{var r=await fetch('https://api.chariow.com/v1/products',{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({name:n,price:pr,description:$('npDesc').value.trim()})});var d=await r.json().catch(function(){return {}});out={ok:r.ok,status:r.status,d:d}}catch(e){out={ok:false,status:0,d:{message:'Réseau indisponible'}}}busy(this,false);
+  if(out.ok){closeModal();say('✓ Produit créé sur Chariow');X.quietSync(true);return}
+  try{navigator.clipboard.writeText(n+' — '+pr+' FCFA\n'+$('npDesc').value)}catch(e){}
+  er.textContent='✕ Chariow a refusé la création ('+out.status+') : '+(out.d.message||out.d.error||'format non accepté')+'. Les détails sont copiés : crée le produit directement dans Chariow, il apparaîtra ici à la prochaine synchronisation.';er.style.display='block'}};
+document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('#page-products button, #page-products .btn');if(b&&/nouveau produit/i.test(b.textContent)){e.preventDefault();e.stopPropagation();window.sfOpenNewProduct()}},true);
+
+/* ================= export CSV réel ================= */
+window.sfExportOrders=function(){var S=window.state;if(!S||!S.live||!(S.sales||[]).length)return say('Aucune commande à exporter : synchronise d\u2019abord Chariow.');
+ var q=function(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'};
+ var rows=[['Date','Client','Email','Téléphone','Produit','Montant (FCFA)','Statut','Statut Chariow','Référence']].concat(S.sales.map(function(s){var d=SFD.date(s);return [d?d.toLocaleString('fr-FR'):'',SFD.name(s),SFD.email(s),SFD.phone(s),SFD.product(s),SFD.amount(s),SFD.label(SFD.cls(s)),SFD.st(s),SFD.sid(s)]}));
+ var csv='\ufeff'+rows.map(function(r){return r.map(q).join(';')}).join('\r\n'),a=document.createElement('a');
+ a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='sellflow-commandes-'+new Date().toISOString().slice(0,10)+'.csv';document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},500);say('✓ '+S.sales.length+' commandes exportées')};
+document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('#page-orders button, #page-orders .btn');if(b&&/exporter/i.test(b.textContent)){e.preventDefault();e.stopPropagation();window.sfExportOrders()}},true);
+
+/* ================= double authentification (TOTP réelle côté serveur) ================= */
+window.sf18TwoFactor=async function(){
+ modal('<div class="eyebrow">SÉCURITÉ</div><h2>Double authentification</h2><p class="sub">Chargement…</p>');
+ var s;try{s=await call('/2fa/status')}catch(e){s={__ok:false}}
+ if(!s.__ok){modal('<div class="eyebrow">SÉCURITÉ</div><h2>Double authentification</h2><p class="sub">La double authentification n\u2019est pas encore disponible sur le serveur SellFlow : elle sera activée avec la prochaine mise à jour du serveur.</p><div class="sfv3-actions"><button type="button" class="btn primary" data-sfclose="1">Fermer</button></div>');return}
+ if(s.enabled){modal('<div class="eyebrow">SÉCURITÉ</div><h2>Double authentification</h2><div class="sfv3-ok">✓ Activée sur ton compte</div><p class="sub">Pour la désactiver, entre le code à 6 chiffres de ton application.</p><input id="tfCode" class="field" inputmode="numeric" maxlength="6" placeholder="123456"><div id="sfv3Err" class="sfv3-err" style="display:none"></div><div class="sfv3-actions"><button type="button" class="btn" data-sfclose="1">Fermer</button><button type="button" class="btn" id="tfOff">Désactiver</button></div>');
+  $('tfOff').onclick=async function(){var r=await call('/2fa/disable',{method:'POST',body:{code:$('tfCode').value.trim()}});if(r.__ok){say('Double authentification désactivée');closeModal();mark(false)}else{$('sfv3Err').textContent='✕ '+(r.error||'Code invalide');$('sfv3Err').style.display='block'}};return}
+ var su=await call('/2fa/setup',{method:'POST'});if(!su.__ok){modal('<h2>Double authentification</h2><p class="sub">✕ '+esc(su.error||'Impossible de préparer la configuration.')+'</p><div class="sfv3-actions"><button type="button" class="btn primary" data-sfclose="1">Fermer</button></div>');return}
+ modal('<div class="eyebrow">SÉCURITÉ</div><h2>Activer la double authentification</h2><ol class="sfv3-list"><li>Installe <b>Google Authenticator</b> ou <b>Microsoft Authenticator</b>.</li><li>Appuie sur le bouton ci-dessous (ou saisis la clé à la main).</li><li>Entre le code à 6 chiffres affiché.</li></ol><a class="btn primary" style="display:block;text-align:center;text-decoration:none" href="'+esc(su.otpauth_url)+'">Ouvrir mon application d\u2019authentification</a><label class="sfv3-l">Clé de configuration manuelle</label><div class="sfv3-msg" style="word-break:break-all;user-select:all">'+esc(su.secret)+'</div><input id="tfCode" class="field" inputmode="numeric" maxlength="6" placeholder="Code à 6 chiffres"><div id="sfv3Err" class="sfv3-err" style="display:none"></div><div class="sfv3-actions"><button type="button" class="btn" data-sfclose="1">Annuler</button><button type="button" class="btn primary" id="tfOn">Activer</button></div>');
+ $('tfOn').onclick=async function(){busy(this,true,'Vérification…');var r=await call('/2fa/enable',{method:'POST',body:{code:$('tfCode').value.trim()}});busy(this,false);
+  if(r.__ok){mark(true);modal('<h2>✓ Double authentification activée</h2><p class="sub">Garde ces codes de secours (utilisables une fois chacun si tu perds ton téléphone) :</p><div class="sfv3-msg" style="user-select:all">'+(r.backup_codes||[]).map(esc).join('<br>')+'</div><div class="sfv3-actions"><button type="button" class="btn primary" data-sfclose="1">J\u2019ai noté les codes</button></div>')}else{$('sfv3Err').textContent='✕ '+(r.error||'Code invalide');$('sfv3Err').style.display='block'}}};
+function mark(on){document.querySelectorAll('button').forEach(function(b){if(/sf18TwoFactor/.test(b.getAttribute('onclick')||''))b.textContent=on?'Activée ✓':'Configurer'})}
+setTimeout(function(){call('/2fa/status').then(function(s){if(s.__ok)mark(!!s.enabled)}).catch(function(){})},3500);
+})();
+
 </script>
 </body>
 </html>
