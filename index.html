@@ -10608,38 +10608,58 @@ function normPhone(v){var d=String(v||'').replace(/[^\d+]/g,'');if(d.indexOf('00
 function phoneOk(v){return /^\+?\d{9,15}$/.test(normPhone(v))&&!/^0\d{8,9}$/.test(normPhone(v))}
 function logRelance(r){var l=SFD.relances();l.unshift(r);jset('sf_relances',l.slice(0,300))}
 
-/* ================= assistant de relance (envoi réel par l'API WhatsApp) ================= */
+/* ================= assistant de relance (lien WhatsApp avec message adapté) ================= */
+function waDigits(v){return String(v||'').replace(/\D/g,'')}
+function waOpen(phone,msg){var url='https://wa.me/'+waDigits(phone)+'?text='+encodeURIComponent(msg),w=null;try{w=window.open(url,'_blank')}catch(e){}if(w){try{w.opener=null}catch(e){}}else{window.location.href=url}}
+function waGreet(name){var f=String(name||'').trim().split(/\s+/)[0];return f&&!/^client$/i.test(f)?'Bonjour '+f+',':'Bonjour,'}
+function waFirstMsg(cls,name,prod,amt,link){
+ var g=waGreet(name),a=money(amt),p='« '+prod+' »';
+ if(cls==='failed')return g+' votre paiement de '+a+' pour '+p+' n’a pas abouti.'+(link?' Vous pouvez le reprendre ici : '+link:' Répondez à ce message et je vous aide à finaliser.');
+ if(cls==='abandoned')return g+' vous avez commencé l’achat de '+p+' ('+a+') mais il n’est pas terminé.'+(link?' Vous pouvez le finaliser ici : '+link:' Répondez à ce message et je vous aide à finaliser.')+' Une question avant de payer ?';
+ return g+' nous vérifions votre paiement de '+a+' pour '+p+'. Pouvez-vous me confirmer que vous avez bien payé ?'}
+var WA_REPLIES=[
+ {k:'later',l:'💤 Pas d’argent / paiera plus tard',f:function(g,p,l){return g+' aucun souci, pas de pression. Dites-moi quand vous pourrez régler et je vous renvoie le lien ici.'+(l?' Le voici dès maintenant : '+l:'')}},
+ {k:'tech',l:'⚠️ Problème technique / paiement refusé',f:function(g,p,l){return g+' désolé pour ce souci. Pouvez-vous me dire quel moyen de paiement vous avez utilisé et le message d’erreur affiché ? Vous pouvez aussi réessayer avec un autre moyen de paiement'+(l?' : '+l:'.')}},
+ {k:'question',l:'❓ Pose une question / hésite',f:function(g,p,l){return g+' avec plaisir, je reste disponible pour toute question sur '+p+'. Dites-moi ce qui vous retient et je vous aide à décider.'+(l?' Quand vous êtes prêt : '+l:'')}},
+ {k:'paid',l:'✅ Dit avoir payé',f:function(g,p,l){return g+' merci pour votre paiement ! Nous le vérifions et vous aurez accès à '+p+' très vite. Si vous ne recevez rien d’ici quelques minutes, écrivez-moi ici.'}},
+ {k:'silent',l:'🔕 Pas de réponse (relance douce)',f:function(g,p,l){return g+' je me permets de revenir vers vous au sujet de '+p+'. Est-ce toujours d’actualité pour vous ?'+(l?' '+l:'')}},
+ {k:'no',l:'🙅 Plus intéressé',f:function(g,p,l){return g+' merci pour votre retour, je comprends. Bonne continuation ! Si vous changez d’avis, le lien reste disponible'+(l?' : '+l:'.')}}
+];
 window.sfOpenRelance=function(sale,opt){
- opt=opt||{};var S={sale:sale,step:opt.step||1,phone:SFD.phone(sale),res:null,err:null};
+ opt=opt||{};var S={sale:sale,step:opt.step||1,phone:SFD.phone(sale),reply:null};
  var name=SFD.name(sale),cls=SFD.cls(sale),prod=SFD.product(sale),amt=SFD.amount(sale),link=SFD.link(sale),d=SFD.date(sale);
- function preview(){var base='Bonjour '+name+', votre paiement de '+money(amt)+' pour « '+prod+' » n\u2019a pas abouti.';return link?base+' Vous pouvez le reprendre ici : '+link:base+' Répondez à ce message et nous vous aidons à finaliser.'}
  function draw(){
-  var head='<div class="eyebrow">ACTION COMMERCIALE</div><h2>'+esc(cls==='failed'?'Paiement échoué':cls==='abandoned'?'Achat abandonné':'Paiement à vérifier')+'</h2>'+steps(S.step,['Diagnostic','Résolution','Étape suivante']);
+  var head='<div class="eyebrow">ACTION COMMERCIALE</div><h2>'+esc(cls==='failed'?'Paiement échoué':cls==='abandoned'?'Achat abandonné':'Paiement à vérifier')+'</h2>'+steps(S.step,['Diagnostic','Message','Réponse client']);
   if(S.step===1){
    var tip=cls==='failed'?'Le paiement a été refusé ou interrompu. Une relance avec le lien de paiement est la meilleure action.':cls==='abandoned'?'Le client a quitté le paiement. Une relance rapide récupère souvent la vente.':'Le paiement est en attente. Vérifie son statut, puis relance si besoin.';
    var why=SFD.reason(sale);
    modal(head+'<div class="sfv3-grid"><div><small>Client</small><b>'+esc(name)+'</b></div><div><small>Produit</small><b>'+esc(prod)+'</b></div><div><small>Montant</small><b>'+money(amt)+'</b></div><div><small>Statut Chariow</small><b>'+esc(SFD.st(sale)||'—')+'</b></div><div><small>Date</small><b>'+(d?d.toLocaleString('fr-FR'):'—')+'</b></div><div><small>Téléphone</small><b>'+(S.phone?esc(S.phone):'manquant')+'</b></div></div>'+(why?'<p class="sub">Raison indiquée : '+esc(why)+'</p>':'')+'<p class="sub">'+tip+(SFD.relanced(SFD.sid(sale))?' <b>Déjà relancé.</b>':'')+'</p><div class="sfv3-actions"><button type="button" class="btn" data-sfclose="1">Annuler</button><button type="button" class="btn primary" id="sfv3Next">Continuer vers la relance →</button></div>');
    $('sfv3Next').onclick=function(){S.step=2;draw()}
   }else if(S.step===2){
-   modal(head+'<label class="sfv3-l">Numéro WhatsApp du client (avec indicatif pays)</label><input id="sfv3Phone" class="field" inputmode="tel" placeholder="+225 07 00 00 00 00" value="'+esc(S.phone)+'"><p class="sub" id="sfv3Hint">'+(S.phone&&!phoneOk(S.phone)?'Ce numéro semble incomplet : ajoute l\u2019indicatif (ex. +225).':'')+'</p><label class="sfv3-l">Message envoyé par l\u2019API WhatsApp</label><div class="sfv3-msg">'+esc(preview())+'</div><p class="sub">L\u2019envoi se fait directement depuis ton numéro WhatsApp Business connecté, sans ouvrir WhatsApp.</p><div id="sfv3Err" class="sfv3-err" style="display:none"></div><div class="sfv3-actions"><button type="button" class="btn" id="sfv3Back">← Retour</button><button type="button" class="btn primary" id="sfv3Send">Envoyer la relance</button></div>');
+   var first=waFirstMsg(cls,name,prod,amt,link);
+   modal(head+'<label class="sfv3-l">Numéro WhatsApp du client (avec indicatif pays)</label><input id="sfv3Phone" class="field" inputmode="tel" placeholder="+225 07 00 00 00 00" value="'+esc(S.phone)+'"><p class="sub" id="sfv3Hint">'+(S.phone&&!phoneOk(S.phone)?'Ce numéro semble incomplet : ajoute l’indicatif (ex. +225).':'')+'</p><label class="sfv3-l">Message prêt à envoyer</label><div class="sfv3-msg">'+esc(first)+'</div><p class="sub">WhatsApp s’ouvre avec le numéro du client et ce message déjà écrit : tu n’as qu’à appuyer sur Envoyer. Tu peux le modifier dans WhatsApp avant d’envoyer.</p><div id="sfv3Err" class="sfv3-err" style="display:none"></div><div class="sfv3-actions"><button type="button" class="btn" id="sfv3Back">← Retour</button><button type="button" class="btn primary" id="sfv3Send">Ouvrir WhatsApp</button></div>');
    $('sfv3Back').onclick=function(){S.step=1;draw()};
-   $('sfv3Send').onclick=async function(){
+   $('sfv3Send').onclick=function(){
     var p=normPhone($('sfv3Phone').value),er=$('sfv3Err');er.style.display='none';
-    if(!phoneOk(p)){er.textContent='Numéro invalide : entre-le avec l\u2019indicatif pays, par exemple +22507000000.';er.style.display='block';return}
+    if(!phoneOk(p)){er.textContent='Numéro invalide : entre-le avec l’indicatif pays, par exemple +22507000000.';er.style.display='block';return}
     var ph=jget('sf_phones',{});ph[SFD.email(sale)||name]=p;jset('sf_phones',ph);S.phone=p;
-    busy(this,true,'Envoi en cours…');
-    var r;try{r=await call('/whatsapp/relance',{method:'POST',body:{name:name,phone:p,amount:money(amt),product:prod,link:link,sale_id:SFD.sid(sale),message:preview()}})}catch(e){r={__ok:false,error:'Serveur injoignable',code:'NETWORK'}}
-    busy(this,false);
-    if(r.__ok&&r.ok!==false){logRelance({sid:SFD.sid(sale),name:name,phone:p,at:Date.now(),ok:true,mid:r.message_id||''});S.res=r;S.step=3;draw();window.sfPaintAll&&window.sfPaintAll();return}
-    logRelance({sid:SFD.sid(sale),name:name,phone:p,at:Date.now(),ok:false,err:String(r.error||r.message||'').slice(0,120)});
-    var code=r.code||'',msg=r.error||r.message||'Envoi impossible.';
-    if(code==='WHATSAPP_NOT_CONNECTED'||/non connect|not connected/i.test(msg))msg='WhatsApp n\u2019est pas connecté. Va dans Réglages → Canaux & intégrations → WhatsApp Business.';
-    else if(code==='TEMPLATE_REQUIRED')msg='Meta exige un modèle de message approuvé pour écrire à un client qui n\u2019a pas écrit depuis 24 h. Renseigne le nom du modèle dans Réglages → Automatisations, puis réessaie.';
-    else if(code==='NETWORK')msg='Le serveur SellFlow ne répond pas. Réessaie dans un instant.';
-    er.textContent='✕ '+msg;er.style.display='block'}
+    logRelance({sid:SFD.sid(sale),name:name,phone:p,at:Date.now(),ok:true,mode:'wa'});
+    waOpen(p,first);
+    S.step=3;draw();window.sfPaintAll&&window.sfPaintAll()}
   }else{
-   modal(head+'<div class="sfv3-ok">✓ Relance envoyée à '+esc(name)+'</div><p class="sub">Message transmis par WhatsApp au '+esc(S.phone)+(S.res&&S.res.message_id?' · réf. '+esc(String(S.res.message_id).slice(0,18)):'')+'.</p><div class="sfv3-grid"><div><small>Étape suivante</small><b>Vérifier le paiement dans 24 h</b></div><div><small>Suivi</small><b>Enregistré dans « Relances »</b></div></div><div class="sfv3-actions"><button type="button" class="btn" id="sfv3Seen">Voir mes relances</button><button type="button" class="btn primary" data-sfclose="1">Terminer</button></div>');
-   $('sfv3Seen').onclick=function(){closeModal();window.sfGoActions('relances')}}
+   var g=waGreet(name),pr='« '+prod+' »',rep=null,i;
+   for(i=0;i<WA_REPLIES.length;i++){if(WA_REPLIES[i].k===S.reply)rep=WA_REPLIES[i]}
+   if(!rep){
+    modal(head+'<div class="sfv3-ok">✓ WhatsApp ouvert pour '+esc(name)+'</div><p class="sub">Quand '+esc(name)+' répond, choisis ce qu’il a dit : le message suivant est préparé pour toi.</p>'+WA_REPLIES.map(function(r){return '<button type="button" class="btn" data-wr="'+r.k+'" style="display:block;width:100%;text-align:left;margin:6px 0">'+esc(r.l)+'</button>'}).join('')+'<div class="sfv3-actions"><button type="button" class="btn" id="sfv3Seen">Voir mes relances</button><button type="button" class="btn primary" data-sfclose="1">Terminer</button></div>');
+    document.querySelectorAll('#sfv3Modal [data-wr]').forEach(function(b){b.onclick=function(){S.reply=this.getAttribute('data-wr');draw()}});
+    $('sfv3Seen').onclick=function(){closeModal();window.sfGoActions('relances')}
+   }else{
+    var next=rep.f(g,pr,link);
+    modal(head+'<label class="sfv3-l">Réponse du client</label><div class="sfv3-msg">'+esc(rep.l)+'</div><label class="sfv3-l">Message prêt à envoyer</label><div class="sfv3-msg">'+esc(next)+'</div><p class="sub">WhatsApp s’ouvre avec ce message déjà écrit : tu n’as qu’à appuyer sur Envoyer.</p><div class="sfv3-actions"><button type="button" class="btn" id="sfv3Other">← Autre réponse</button><button type="button" class="btn primary" id="sfv3Reply">Ouvrir WhatsApp</button></div>');
+    $('sfv3Other').onclick=function(){S.reply=null;draw()};
+    $('sfv3Reply').onclick=function(){waOpen(S.phone,next)}
+   }
+  }
  }
  draw()};
 function findSale(name,amount){var M=SFD.metrics(),all=M.toVerify.concat(M.paid),n=String(name||'').toLowerCase();
@@ -10657,12 +10677,11 @@ window.simulateAutomation=function(type){
  var list=set[0].slice().sort(function(a,b){return (SFD.date(b)||0)-(SFD.date(a)||0)}),s=list[0];
  if(!s){modal('<h2>'+set[1]+'</h2><p class="sub">Aucune situation correspondante dans tes données Chariow actuelles. Rien n\u2019est simulé avec de fausses données.</p><div class="sfv3-actions"><button type="button" class="btn primary" data-sfclose="1">Fermer</button></div>');return}
  var ruleKey=type==='payment-failed'?'failed':type==='abandoned'?'abandoned':'waiting',on=rules.master!==false&&rules[ruleKey]!==false;
- var msg='Bonjour '+SFD.name(s)+', votre paiement de '+money(SFD.amount(s))+' pour « '+SFD.product(s)+' » n\u2019a pas abouti.'+(SFD.link(s)?' Reprenez-le ici : '+SFD.link(s):'');
- modal('<div class="eyebrow">TEST DU MOTEUR · DONNÉES RÉELLES</div><h2>'+set[1]+'</h2><ol class="sfv3-list"><li>✓ '+esc(set[2](s))+'</li><li>✓ Qualification : '+esc(SFD.label(SFD.cls(s)))+' · statut Chariow « '+esc(SFD.st(s))+' »</li><li>'+(on?'✓':'✕')+' Règle « '+esc(set[1])+' » '+(on?'activée':'désactivée : aucune relance automatique')+'</li><li>✓ Délai avant relance : '+delay+'</li><li>✓ Message préparé :</li></ol><div class="sfv3-msg">'+esc(msg)+'</div><p class="sub">Aucun message n\u2019a été envoyé au client. Pour vérifier l\u2019envoi réel, envoie ce test à ton propre numéro :</p><input id="sfv3TestPhone" class="field" inputmode="tel" placeholder="+225 07 00 00 00 00"><div id="sfv3Err" class="sfv3-err" style="display:none"></div><div class="sfv3-actions"><button type="button" class="btn" data-sfclose="1">Fermer</button><button type="button" class="btn primary" id="sfv3TestSend">Envoyer à mon numéro</button></div>');
+ var msg=waFirstMsg(SFD.cls(s),SFD.name(s),SFD.product(s),SFD.amount(s),SFD.link(s));
+ modal('<div class="eyebrow">TEST DU MOTEUR · DONNÉES RÉELLES</div><h2>'+set[1]+'</h2><ol class="sfv3-list"><li>✓ '+esc(set[2](s))+'</li><li>✓ Qualification : '+esc(SFD.label(SFD.cls(s)))+' · statut Chariow « '+esc(SFD.st(s))+' »</li><li>'+(on?'✓':'✕')+' Règle « '+esc(set[1])+' » '+(on?'activée':'désactivée : aucune relance automatique')+'</li><li>✓ Délai avant relance : '+delay+'</li><li>✓ Message préparé :</li></ol><div class="sfv3-msg">'+esc(msg)+'</div><p class="sub">Aucun message n\u2019a été envoyé au client. Pour voir le rendu réel, ouvre-le dans WhatsApp sur ton propre numéro :</p><input id="sfv3TestPhone" class="field" inputmode="tel" placeholder="+225 07 00 00 00 00"><div id="sfv3Err" class="sfv3-err" style="display:none"></div><div class="sfv3-actions"><button type="button" class="btn" data-sfclose="1">Fermer</button><button type="button" class="btn primary" id="sfv3TestSend">Ouvrir dans WhatsApp</button></div>');
  var res=$('sf-automation-result');if(res)res.textContent='Dernier test : '+set[1]+' · '+SFD.name(s)+' · '+new Date().toLocaleTimeString('fr-FR');
- $('sfv3TestSend').onclick=async function(){var p=normPhone($('sfv3TestPhone').value),er=$('sfv3Err');er.style.display='none';if(!phoneOk(p)){er.textContent='Entre ton numéro avec l\u2019indicatif pays.';er.style.display='block';return}
-  busy(this,true,'Envoi…');var r;try{r=await call('/whatsapp/relance',{method:'POST',body:{name:'Test SellFlow',phone:p,amount:money(SFD.amount(s)),product:SFD.product(s),link:SFD.link(s),sale_id:'test-'+Date.now(),message:msg,test:true}})}catch(e){r={__ok:false,error:'Serveur injoignable'}}busy(this,false);
-  if(r.__ok&&r.ok!==false){er.className='sfv3-ok';er.textContent='✓ Message de test envoyé à '+p;er.style.display='block'}else{er.className='sfv3-err';er.textContent='✕ '+(r.error||r.message||'Envoi impossible')+(r.code==='TEMPLATE_REQUIRED'?' — renseigne le modèle Meta dans Réglages → Automatisations.':'');er.style.display='block'}}};
+ $('sfv3TestSend').onclick=function(){var p=normPhone($('sfv3TestPhone').value),er=$('sfv3Err');er.style.display='none';if(!phoneOk(p)){er.className='sfv3-err';er.textContent='Entre ton numéro avec l\u2019indicatif pays.';er.style.display='block';return}
+  waOpen(p,msg);er.className='sfv3-ok';er.textContent='✓ WhatsApp ouvert avec le message de test';er.style.display='block'}};
 
 /* ================= règles : sauvegarde réelle + carte serveur ================= */
 function applyRules(){var r=jget('sf_rules',null);if(!r)return;document.querySelectorAll('[data-sf-rule]').forEach(function(i){var k=i.getAttribute('data-sf-rule');if(r[k]!=null&&i.checked!==!!r[k])i.checked=!!r[k]});var m=$('sf-engine-master');if(m&&r.master!=null&&m.checked!==!!r.master)m.checked=!!r.master}
@@ -10676,11 +10695,7 @@ async function loadSrv(){var c=$('sfSrvCard');if(!c)return;var d;try{d=await cal
  $('sfSrvTpl').value=d.template_name||'';
  st.textContent=(d.enabled?'✓ Actif : les relances partent même app fermée. ':'Désactivé. ')+(d.whatsapp_connected?'WhatsApp connecté. ':'⚠ WhatsApp non connecté. ')+(d.template_name?'Modèle : '+d.template_name+'. ':'⚠ Aucun modèle Meta renseigné. ')+(d.last_run?'Dernière exécution : '+new Date(d.last_run).toLocaleString('fr-FR')+'. ':'')+(d.sent_today!=null?d.sent_today+' envoyée(s) aujourd\u2019hui.':'')}
 function injectCard(){var box=document.querySelector('.sf-test-box');if(!box||$('sfSrvCard'))return;
- box.insertAdjacentHTML('afterend','<div class="sfv3-card2" id="sfSrvCard"><h3>🤖 Relances automatiques (serveur)</h3><p class="sub" id="sfSrvState">Chargement…</p><div class="sf-rule"><div><b>Activer les relances automatiques</b><small>Paiements échoués et achats abandonnés, nouveaux uniquement.</small></div><label class="switch7"><input type="checkbox" id="sfSrvToggle"><span></span></label></div><label class="sfv3-l">Délai avant relance</label><select id="sfSrvDelay" class="field"><option value="1">1 minute</option><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="60">1 heure</option></select><label class="sfv3-l">Nom du modèle WhatsApp approuvé par Meta</label><div style="display:flex;gap:8px"><input id="sfSrvTpl" class="field" placeholder="ex. relance_paiement"><button type="button" class="btn" id="sfSrvTplSave">Enregistrer</button></div><label class="sfv3-l">Adresse webhook à coller dans Chariow (réception instantanée)</label><div style="display:flex;gap:8px"><input id="sfSrvWebhook" class="field" readonly><button type="button" class="btn" id="sfSrvCopy">Copier</button></div></div>');
- $('sfSrvToggle').onchange=async function(){var on=this.checked,r=await pushCfg({enabled:on});if(!r.__ok){this.checked=!on;say('✕ '+(r.error||r.message||'Serveur injoignable'))}else say(on?'✓ Relances automatiques activées (nouvelles ventes uniquement)':'Relances automatiques désactivées');loadSrv()};
- $('sfSrvDelay').onchange=function(){jset('sf_delay',Number(this.value));pushCfg()};
- $('sfSrvTplSave').onclick=async function(){var r=await call('/whatsapp/template',{method:'POST',body:{name:$('sfSrvTpl').value.trim(),language:'fr'}});say(r.__ok?'✓ Modèle enregistré':'✕ '+(r.error||'Échec'));loadSrv()};
- $('sfSrvCopy').onclick=function(){var v=$('sfSrvWebhook').value;if(!v)return say('Active d\u2019abord les relances automatiques');try{navigator.clipboard.writeText(v);say('✓ Adresse copiée')}catch(e){$('sfSrvWebhook').select()}};loadSrv()}
+ box.insertAdjacentHTML('afterend','<div class="sfv3-card2" id="sfSrvCard"><h3>💬 Relances par WhatsApp</h3><p class="sub">Quand un paiement échoue ou qu\u2019un achat est abandonné, touche « Relancer » : WhatsApp s\u2019ouvre avec le numéro du client et un message adapté, tu n\u2019as qu\u2019à appuyer sur Envoyer. Après sa réponse, choisis ce qu\u2019il a dit pour préparer le message suivant.</p></div>')}
 setInterval(function(){injectCard();applyRules()},1500);
 
 /* ================= produits : images Chariow + création ================= */
