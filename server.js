@@ -58,6 +58,37 @@ try {
 }
 
 /* =========================================================
+   WHATSAPP
+========================================================= */
+
+let whatsappRoutes = null;
+
+try {
+  whatsappRoutes = require('./routes/whatsapp');
+
+  console.log(
+    '✅ routes/whatsapp.js chargé.'
+  );
+} catch (error) {
+  console.log(
+    'ℹ️ routes/whatsapp.js non installé : ' +
+    error.message
+  );
+}
+
+let startWhatsappQueueWorker = null;
+
+try {
+  startWhatsappQueueWorker =
+    require('./services/whatsapp-queue').startWorker;
+} catch (error) {
+  console.log(
+    'ℹ️ services/whatsapp-queue.js non installé : ' +
+    error.message
+  );
+}
+
+/* =========================================================
    CORS
 ========================================================= */
 
@@ -232,14 +263,14 @@ app.use(
 
 app.use(
   express.json({
-    limit: '1mb'
+    limit: '10mb'
   })
 );
 
 app.use(
   express.urlencoded({
     extended: true,
-    limit: '1mb'
+    limit: '10mb'
   })
 );
 
@@ -285,6 +316,11 @@ app.get(
         subscriptions:
           subscriptionRoutes
             ? '/subscriptions'
+            : 'non installé',
+
+        whatsapp:
+          whatsappRoutes
+            ? '/whatsapp'
             : 'non installé',
 
         payments:
@@ -376,6 +412,19 @@ app.use(
   '/chariow',
   chariowRoutes
 );
+
+/* =========================================================
+   WHATSAPP
+========================================================= */
+
+if (
+  whatsappRoutes
+) {
+  app.use(
+    '/whatsapp',
+    whatsappRoutes
+  );
+}
 
 /* =========================================================
    SUBSCRIPTIONS
@@ -660,6 +709,20 @@ async function startServer() {
           /* -----------------------------
              WORKER ABONNEMENTS
           ----------------------------- */
+
+          if (
+            typeof startWhatsappQueueWorker ===
+            'function'
+          ) {
+            startWhatsappQueueWorker().catch(
+              function (queueError) {
+                console.error(
+                  '❌ Erreur file WhatsApp:',
+                  queueError
+                );
+              }
+            );
+          }
 
           if (
             typeof startSubscriptionReminderWorker ===

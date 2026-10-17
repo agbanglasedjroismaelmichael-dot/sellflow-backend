@@ -6969,7 +6969,15 @@ document.addEventListener('click',function(e){let t=e.target.closest('[onclick*=
         client:'',amount:0,date:c.syncedAt,action:null
       });
     }
-    return out.slice(0,50);
+    return out.slice(0,50).map(i=>Object.assign({},i,{key:[i.title,i.client,i.amount,i.date].join('|')}));
+  }
+
+  const SEEN_KEY='sf_notif_seen_v1';
+  function getSeen(){try{return JSON.parse(localStorage.getItem(SEEN_KEY)||'{}')||{}}catch(e){return {}}}
+  function markSeen(keys){
+    const s=getSeen();keys.forEach(k=>{s[k]=Date.now()});
+    const ks=Object.keys(s);if(ks.length>500){ks.sort((a,b)=>s[a]-s[b]).slice(0,ks.length-500).forEach(k=>delete s[k])}
+    try{localStorage.setItem(SEEN_KEY,JSON.stringify(s))}catch(e){}
   }
 
   function renderPage(){
@@ -6994,7 +7002,7 @@ document.addEventListener('click',function(e){let t=e.target.closest('[onclick*=
       return;
     }
 
-    box.innerHTML=items.map(i=>{
+    const renderItem=(i,isSeen)=>{
       const d=i.date?new Date(i.date):null;
       const date=d&&!isNaN(d)?d.toLocaleString('fr-FR'):'';
       const details=[
@@ -7003,12 +7011,26 @@ document.addEventListener('click',function(e){let t=e.target.closest('[onclick*=
         date?'<span>'+esc(date)+'</span>':''
       ].filter(Boolean).join(' · ');
       const action=i.action?'<button class="btn" style="margin-top:9px" onclick="openAction(\''+esc(i.action)+'\',\''+esc(i.client||'')+'\')">'+(i.action==='payment'?'Vérifier':'Répondre')+'</button>':'';
-      return '<div class="sf-v16-notif-item">'+
+      return '<div class="sf-v16-notif-item" data-key="'+esc(i.key)+'" style="'+(isSeen?'opacity:.5':'')+'">'+
         '<div class="sf-v16-notif-icon '+(i.type==='bad'?'sf-v16-bad':i.type==='warn'?'sf-v16-warn':'sf-v16-info')+'">'+esc(i.icon)+'</div>'+
-        '<div><b>'+esc(i.title)+'</b><p>'+esc(i.text)+'</p><p style="margin-top:5px;font-size:9px">'+details+'</p>'+action+'</div>'+
+        '<div><b>'+esc(i.title)+'</b><p>'+esc(i.text)+'</p><p style="margin-top:5px;font-size:9px">'+details+'</p>'+action+(isSeen||i.type==='info'?'':'<button type="button" class="btn" style="margin-top:9px;margin-left:6px" data-sf-seen="'+esc(i.key)+'">✓ Vu</button>')+'</div>'+
         '<small class="'+(i.type==='bad'?'sf-v16-bad':i.type==='warn'?'sf-v16-warn':'sf-v16-info')+'">'+(i.type==='bad'?'Urgent':i.type==='warn'?'À traiter':'Info')+'</small>'+
         '</div>';
-    }).join('');
+    };
+    const seen=getSeen();
+    const fresh=items.filter(i=>!seen[i.key]);
+    const old=items.filter(i=>seen[i.key]);
+    const actionable=fresh.filter(i=>i.type!=='info');
+    box.innerHTML=
+      (actionable.length?'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px"><b>'+actionable.length+' non vue(s)</b><button type="button" class="btn" data-sf-seen-all="1">✓ Tout marquer comme vu</button></div>':'<div class="sf-v16-notif-empty"><b>Tout est à jour ✓</b></div>')+
+      fresh.map(i=>renderItem(i,false)).join('')+
+      (old.length?'<details style="margin-top:12px"><summary style="cursor:pointer;opacity:.75">Déjà vues ('+old.length+')</summary>'+old.map(i=>renderItem(i,true)).join('')+'</details>':'');
+    box.onclick=function(e){
+      const one=e.target.closest&&e.target.closest('[data-sf-seen]');
+      const all=e.target.closest&&e.target.closest('[data-sf-seen-all]');
+      if(one){markSeen([one.getAttribute('data-sf-seen')]);renderAll()}
+      else if(all){markSeen(actionable.map(i=>i.key));renderAll()}
+    };
   }
 
   function updateBell(){
@@ -7027,7 +7049,7 @@ document.addEventListener('click',function(e){let t=e.target.closest('[onclick*=
       badge.id='sfV16NotifCount';
       b.appendChild(badge);
     }
-    const count=buildNotifications().filter(x=>x.type!=='info').length;
+    const seenNow=getSeen();const count=buildNotifications().filter(x=>x.type!=='info'&&!seenNow[x.key]).length;
     badge.textContent=count>99?'99+':String(count);
     badge.style.display=count?'flex':'none';
 
@@ -8479,11 +8501,6 @@ window.SF_FRONTEND_VERSION='20.0.0';
 </script>
 <script>
 window.SF_FRONTEND_VERSION='20.0.0';
-</script>
-  window.addEventListener('hashchange',function(){
-    try{window.hideChariowLock()}catch(e){}
-  });
-})();
 </script>
 
 
@@ -10740,5 +10757,307 @@ setTimeout(function(){call('/2fa/status').then(function(s){if(s.__ok)mark(!!s.en
 })();
 
 </script>
+<script id="sf-whatsapp-pairing-js">
+(function(){
+  'use strict';
+  var timer=null;
+  function apiBase(){
+    try{var a=(window.SF_API_BASE||window.API_BASE||'');if(a)return String(a).replace(/\/+$/,'')}catch(e){}
+    return 'https://sellflow-backend.onrender.com';
+  }
+  function tok(){
+    try{return localStorage.getItem('sellflow_token')||localStorage.getItem('sellflow_access_token')||sessionStorage.getItem('sellflow_token')||''}catch(e){return ''}
+  }
+  function toastS(m){ if(typeof toast==='function')toast(m); else alert(m); }
+  function call(path,opts){
+    opts=opts||{};opts.headers=Object.assign({'Content-Type':'application/json','Accept':'application/json','Authorization':'Bearer '+tok()},opts.headers||{});
+    return fetch(apiBase()+path,opts).then(function(r){return r.json().catch(function(){return {}}).then(function(d){if(!r.ok||d.ok===false)throw new Error(d.message||('Erreur '+r.status));return d})});
+  }
+  function stop(){ if(timer){clearInterval(timer);timer=null} }
+
+  function inject(){
+    var form=document.getElementById('sfIntForm');
+    if(!form||document.getElementById('sfWaQuick'))return;
+    var box=document.createElement('div');
+    box.id='sfWaQuick';
+    box.style.cssText='margin:0 0 16px;padding:14px;border-radius:14px;border:1px solid rgba(37,211,102,.45);background:rgba(37,211,102,.08)';
+    box.innerHTML=
+      '<div style="font-weight:800;margin-bottom:4px">⚡ Connexion rapide (recommandée)</div>'+
+      '<div style="font-size:13px;opacity:.85;margin-bottom:10px">Entre ton numéro WhatsApp, reçois un code à 8 caractères, puis saisis-le dans WhatsApp &gt; Appareils connectés.</div>'+
+      '<input id="sfWaQuickPhone" type="tel" inputmode="tel" placeholder="Numéro avec indicatif, sans + ni 0 (ex. 22998164790)" style="width:100%;box-sizing:border-box;margin-bottom:8px">'+
+      '<button type="button" id="sfWaQuickBtn" class="btn primary" style="width:100%">Générer le code</button>'+
+      '<div id="sfWaQuickOut" style="display:none;margin-top:12px;text-align:center">'+
+        '<div style="font-size:12px;opacity:.8">Ton code de jumelage</div>'+
+        '<div id="sfWaQuickCode" style="font-size:30px;font-weight:900;letter-spacing:4px;margin:6px 0"></div>'+
+        '<div style="font-size:12px;opacity:.85">WhatsApp &gt; Appareils connectés &gt; Connecter un appareil &gt; <b>Associer avec le numéro de téléphone</b></div>'+
+        '<div id="sfWaQuickState" style="font-size:13px;margin-top:8px;font-weight:700">En attente de ta validation…</div>'+
+      '</div>'+
+      '<div style="font-size:11px;opacity:.7;margin-top:10px">Connexion non officielle : respecte les délais d’envoi pour éviter le blocage du numéro.</div>'+
+      '<div style="text-align:center;font-size:12px;opacity:.7;margin-top:12px">— ou utilise l’API Meta (avancé) ci-dessous —</div>';
+    form.insertBefore(box,form.firstChild);
+    document.getElementById('sfWaQuickBtn').onclick=generate;
+  }
+
+  function generate(){
+    var phone=(document.getElementById('sfWaQuickPhone').value||'').replace(/\D/g,'');
+    var btn=document.getElementById('sfWaQuickBtn');
+    if(phone.length<9){toastS('Entre ton numéro avec l’indicatif pays (ex. 22998164790)');return}
+    if(!tok()){toastS('Connecte-toi avant de configurer WhatsApp');return}
+    btn.disabled=true;btn.textContent='Génération du code…';
+    call('/whatsapp/pair',{method:'POST',body:JSON.stringify({phone:phone})}).then(function(d){
+      document.getElementById('sfWaQuickOut').style.display='block';
+      document.getElementById('sfWaQuickCode').textContent=d.code;
+      document.getElementById('sfWaQuickState').textContent='En attente de ta validation…';
+      btn.disabled=false;btn.textContent='Générer un nouveau code';
+      stop();var n=0;
+      timer=setInterval(function(){
+        n++; if(n>100){stop();document.getElementById('sfWaQuickState').textContent='Code expiré. Génère un nouveau code.';return}
+        call('/whatsapp/pair/status').then(function(s){
+          if(s.status==='connected'){
+            stop();
+            document.getElementById('sfWaQuickState').textContent='✓ WhatsApp connecté';
+            try{var raw=localStorage.getItem('sellflow_universal_integrations_v1');var data=raw?JSON.parse(raw):{};
+              data.whatsapp={name:'WhatsApp Business',connected:true,connectedAt:new Date().toISOString(),mode:'pairing',displayPhone:phone};
+              localStorage.setItem('sellflow_universal_integrations_v1',JSON.stringify(data));}catch(e){}
+            toastS('✓ WhatsApp connecté');
+          }
+        }).catch(function(){});
+      },3000);
+    }).catch(function(e){
+      btn.disabled=false;btn.textContent='Générer le code';toastS('✕ '+(e.message||'Impossible de générer le code'));
+    });
+  }
+
+  var prev=window.openUniversalIntegrationConfig;
+  window.openUniversalIntegrationConfig=function(name,desc,slug){
+    var r=typeof prev==='function'?prev.apply(this,arguments):undefined;
+    stop();
+    var old=document.getElementById('sfWaQuick');if(old)old.remove();
+    if(String(slug||'')==='whatsapp'){ setTimeout(inject,60); }
+    return r;
+  };
+  var prevClose=window.closeUniversalIntegrationConfig;
+  window.closeUniversalIntegrationConfig=function(){stop();return typeof prevClose==='function'?prevClose.apply(this,arguments):undefined};
+})();
+</script>
+
+<script id="sf-whatsapp-queue-js">
+(function(){
+  'use strict';
+  function apiBase(){
+    try{var a=(window.SF_API_BASE||window.API_BASE||'');if(a)return String(a).replace(/\/+$/,'')}catch(e){}
+    return 'https://sellflow-backend.onrender.com';
+  }
+  function tok(){
+    try{return localStorage.getItem('sellflow_token')||localStorage.getItem('sellflow_access_token')||sessionStorage.getItem('sellflow_token')||''}catch(e){return ''}
+  }
+  function say(m){ if(typeof toast==='function')toast(m); else alert(m); }
+  function call(path,opts){
+    opts=opts||{};
+    opts.headers=Object.assign({'Content-Type':'application/json','Accept':'application/json','Authorization':'Bearer '+tok()},opts.headers||{});
+    return fetch(apiBase()+path,opts).then(function(r){
+      return r.json().catch(function(){return {}}).then(function(d){
+        if(!r.ok||d.ok===false){var e=new Error(d.message||('Erreur '+r.status));e.code=d.code||'';throw e}
+        return d;
+      });
+    });
+  }
+
+  /* ----- Bouton « File automatique » ajouté à l'assistant de relance (étape Message) ----- */
+  function addQueueButton(){
+    var send=document.getElementById('sfv3Send');
+    if(!send||document.getElementById('sfv3Queue'))return;
+    var b=document.createElement('button');
+    b.type='button';b.id='sfv3Queue';b.className='btn';b.textContent='📤 Envoyer via la file auto';
+    b.style.marginRight='6px';
+    send.parentNode.insertBefore(b,send);
+    b.onclick=async function(){
+      var phone=String((document.getElementById('sfv3Phone')||{}).value||'').replace(/[^\d]/g,'');
+      var msgEl=document.querySelector('#sfv3Modal .sfv3-msg');
+      var msg=msgEl?msgEl.textContent.trim():'';
+      var title=document.querySelector('#sfv3Modal h2');
+      if(phone.length<8){say('Numéro invalide : entre-le avec l’indicatif pays');return}
+      if(!tok()){say('Session expirée. Reconnecte-toi.');return}
+      b.disabled=true;
+      try{
+        var d=await call('/whatsapp/queue',{method:'POST',body:JSON.stringify({items:[{name:'Client',phone:phone,message:msg}]})});
+        say('✓ Ajouté à la file ('+d.pending+' en attente). Envoi espacé automatiquement.');
+        var close=document.querySelector('#sfv3Modal [data-sfclose]');if(close)close.click();
+        refresh();
+      }catch(e){
+        b.disabled=false;
+        if(e.code==='WHATSAPP_NOT_CONNECTED'){
+          say('WhatsApp non connecté · ouvre Intégrations');
+          if(typeof openUniversalIntegrationConfig==='function')setTimeout(function(){openUniversalIntegrationConfig('WhatsApp Business','Conversations, réponses et relances','whatsapp')},400);
+        }else say('✕ '+(e.message||'Ajout à la file impossible'));
+      }
+    };
+  }
+  new MutationObserver(function(){addQueueButton()}).observe(document.documentElement,{childList:true,subtree:true});
+
+  /* ----- Petit panneau de suivi : visible seulement s'il y a des relances en attente ----- */
+  var box=null,last=null;
+  function ensureBox(){
+    if(box)return box;
+    box=document.createElement('div');
+    box.id='sfWaQueueBox';
+    box.style.cssText='position:fixed;left:12px;bottom:84px;z-index:2147482000;max-width:calc(100vw - 24px);background:#0f1424;color:#fff;border:1px solid rgba(37,211,102,.6);border-radius:14px;padding:10px 12px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.35);display:none';
+    box.innerHTML='<div id="sfWaQueueTxt" style="font-weight:700;margin-bottom:6px"></div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+      '<button type="button" id="sfWaQueuePause" style="padding:6px 10px;border-radius:9px;border:0;background:#25d366;color:#05220f;font-weight:800;cursor:pointer"></button>'+
+      '<button type="button" id="sfWaQueueCancel" style="padding:6px 10px;border-radius:9px;border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;font-weight:700;cursor:pointer">Annuler</button>'+
+      '</div>';
+    document.body.appendChild(box);
+    document.getElementById('sfWaQueuePause').onclick=function(){
+      call('/whatsapp/queue/'+(last&&last.paused?'resume':'pause'),{method:'POST'}).then(refresh).catch(function(e){say('✕ '+e.message)});
+    };
+    document.getElementById('sfWaQueueCancel').onclick=function(){
+      if(!confirm('Annuler toutes les relances en attente ?'))return;
+      call('/whatsapp/queue/cancel',{method:'POST'}).then(function(d){say(d.cancelled+' relance(s) annulée(s)');refresh()}).catch(function(e){say('✕ '+e.message)});
+    };
+    return box;
+  }
+  function render(q){
+    last=q;
+    var pending=(q.counts&&q.counts.pending)||0;
+    var b=ensureBox();
+    if(!pending){b.style.display='none';return}
+    b.style.display='block';
+    var txt='📤 '+pending+' relance(s) en attente · '+q.sent_24h+'/'+q.daily_limit+' envoyées sur 24 h';
+    if(q.paused)txt+=' · ⏸ en pause';
+    else if(q.sent_24h>=q.daily_limit)txt+=' · limite atteinte, reprise automatique plus tard';
+    document.getElementById('sfWaQueueTxt').textContent=txt;
+    document.getElementById('sfWaQueuePause').textContent=q.paused?'▶ Reprendre':'⏸ Pause';
+  }
+  function refresh(){
+    if(!tok())return Promise.resolve();
+    return call('/whatsapp/queue').then(render).catch(function(){});
+  }
+  window.sfWaQueueRefresh=refresh;
+  setTimeout(refresh,2500);
+  setInterval(refresh,30000);
+})();
+</script>
+
+<script id="sf-chariow-restore-js">
+(function(){
+  'use strict';
+  /* La clé Chariow n'était gardée que pour la session : à la réouverture, tout croyait la boutique non connectée.
+     On la restaure depuis le serveur dès que l'utilisateur est connecté. */
+  function apiBase(){
+    try{var a=(window.SF_API_BASE||window.API_BASE||'');if(a)return String(a).replace(/\/+$/,'')}catch(e){}
+    return 'https://sellflow-backend.onrender.com';
+  }
+  function tok(){
+    try{return localStorage.getItem('sellflow_token')||localStorage.getItem('sellflow_access_token')||sessionStorage.getItem('sellflow_token')||''}catch(e){return ''}
+  }
+  var tries=0,busy=false,done=false;
+  function label(name,url){
+    try{
+      var b=document.querySelector('.workspace-card b');
+      if(b&&name&&/aucune boutique/i.test(b.textContent))b.textContent=name;
+      var t=document.querySelector('.n13-brand b');if(t&&name)t.textContent=name+' ↔ SellFlow';
+      var s=document.querySelector('.n13-brand small');if(s&&url)s.textContent=url;
+    }catch(e){}
+  }
+  function restore(){
+    if(done||busy)return;
+    if(!tok())return;
+    if(sessionStorage.getItem('sellflow_chariow_api_key')){done=true;return}
+    busy=true;
+    fetch(apiBase()+'/chariow/stores/active/key',{headers:{Authorization:'Bearer '+tok(),Accept:'application/json'}})
+      .then(function(r){return r.json().catch(function(){return {}})})
+      .then(function(d){
+        busy=false;
+        if(!d||!d.ok||!d.connected||!d.api_key){ if(d&&d.ok&&d.connected===false)done=true; return }
+        done=true;
+        try{sessionStorage.setItem('sellflow_chariow_api_key',d.api_key)}catch(e){}
+        try{chariowApiKey14=d.api_key}catch(e){}
+        label(d.store_name,d.store_url);
+        var st=document.getElementById('chApiStatus');if(st){st.textContent='CONNECTÉE';st.className='status s-good'}
+        if(typeof window.sfSyncChariowLive==='function'){try{window.sfSyncChariowLive()}catch(e){}}
+        setTimeout(function(){label(d.store_name,d.store_url)},2500);
+      })
+      .catch(function(){busy=false});
+  }
+  var iv=setInterval(function(){
+    tries++;restore();
+    if(done||tries>120)clearInterval(iv);
+  },2000);
+  window.addEventListener('hashchange',function(){if(!done)restore()});
+})();
+</script>
+<script id="sf-contrast-fixer-js">
+(function(){
+  'use strict';
+  /* Rend tout texte lisible : si la couleur du texte est trop proche du fond réel (thème clair ou sombre),
+     on la remplace par du noir ou du blanc. N'agit que sur les textes illisibles. */
+  var FLAG='data-sf-cfix';
+  function parse(c){
+    var m=/rgba?\(([^)]+)\)/.exec(c||'');if(!m)return null;
+    var p=m[1].split(/[ ,\/]+/).filter(Boolean).map(parseFloat);
+    return {r:p[0]||0,g:p[1]||0,b:p[2]||0,a:p.length>3&&!isNaN(p[3])?p[3]:1};
+  }
+  function lum(c){
+    function f(v){v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4)}
+    return 0.2126*f(c.r)+0.7152*f(c.g)+0.0722*f(c.b);
+  }
+  function ratio(a,b){var l1=lum(a),l2=lum(b);if(l1<l2){var t=l1;l1=l2;l2=t}return (l1+0.05)/(l2+0.05)}
+  function effectiveBg(el){
+    var layers=[],n=el;
+    while(n&&n.nodeType===1){
+      var st=getComputedStyle(n);
+      if(st.backgroundImage&&st.backgroundImage!=='none')return null; /* dégradé ou image : on ne touche pas */
+      var c=parse(st.backgroundColor);
+      if(c&&c.a>0){layers.push(c);if(c.a>=0.98)break}
+      n=n.parentElement;
+    }
+    var light=document.body.classList.contains('light')||document.body.classList.contains('light-mode7');
+    var base=light?{r:245,g:247,b:247}:{r:11,g:15,b:25};
+    for(var i=layers.length-1;i>=0;i--){
+      var l=layers[i];
+      base={r:l.r*l.a+base.r*(1-l.a),g:l.g*l.a+base.g*(1-l.a),b:l.b*l.a+base.b*(1-l.a)};
+    }
+    return base;
+  }
+  function hasOwnText(el){
+    for(var i=0;i<el.childNodes.length;i++){var n=el.childNodes[i];if(n.nodeType===3&&n.nodeValue.trim())return true}
+    return false;
+  }
+  var running=false,timer=null;
+  function run(){
+    if(running)return;running=true;
+    var list=document.querySelectorAll('body *');
+    var i=0;
+    function chunk(){
+      var end=Math.min(i+500,list.length);
+      for(;i<end;i++){
+        var el=list[i];
+        if(el.tagName==='SCRIPT'||el.tagName==='STYLE'||el.tagName==='SVG'||el.tagName==='OPTION')continue;
+        if(!hasOwnText(el))continue;
+        if(!el.offsetParent&&getComputedStyle(el).position!=='fixed')continue;
+        if(el.hasAttribute(FLAG)){el.style.removeProperty('color');el.removeAttribute(FLAG)}
+        var cs=getComputedStyle(el);
+        var fg=parse(cs.color);if(!fg)continue;
+        var bg=effectiveBg(el);
+        if(!bg)continue;
+        if(fg.a<1){fg={r:fg.r*fg.a+bg.r*(1-fg.a),g:fg.g*fg.a+bg.g*(1-fg.a),b:fg.b*fg.a+bg.b*(1-fg.a),a:1}}
+        if(ratio(fg,bg)<3){
+          el.style.setProperty('color',lum(bg)>0.4?'#15171b':'#f2f5ff','important');
+          el.setAttribute(FLAG,'1');
+        }
+      }
+      if(i<list.length)requestAnimationFrame(chunk);else running=false;
+    }
+    chunk();
+  }
+  function schedule(){clearTimeout(timer);timer=setTimeout(run,600)}
+  new MutationObserver(schedule).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+  window.addEventListener('hashchange',schedule);
+  window.addEventListener('load',schedule);
+  schedule();
+})();
+</script>
+
 </body>
 </html>
